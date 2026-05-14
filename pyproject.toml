@@ -120,12 +120,20 @@ check_untyped_defs = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
 ignore_missing_imports = true
-exclude = ["macro", ".venv", "alembic/versions", "frontend"]
+exclude = ["^macro/", "^\\.venv/", "^alembic/versions/", "^frontend/"]
 
 [[tool.mypy.overrides]]
 module = ["tests.*", "scripts.*"]
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
+
+# Dagster's decorator DSL produces dynamic types that strict mypy can't
+# follow cleanly. Stay strict on the rest of the codebase.
+[[tool.mypy.overrides]]
+module = ["orchestration.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_any_generics = false
 
 # ---------- Pytest ----------
 [tool.pytest.ini_options]

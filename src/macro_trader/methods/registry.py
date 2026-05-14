@@ -100,7 +100,7 @@ class MethodRegistry:
             except KeyError as exc:
                 raise MethodNotFoundError(method_id) from exc
 
-    def list(
+    def list_methods(
         self,
         *,
         component: str | None = None,
@@ -306,7 +306,7 @@ def list_methods(
     component: str | None = None,
     status: MethodStatus | None = None,
 ) -> list[MethodMetadata]:
-    return _registry.list(component=component, status=status)
+    return _registry.list_methods(component=component, status=status)
 
 
 def set_status(

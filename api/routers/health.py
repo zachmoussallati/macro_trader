@@ -60,7 +60,7 @@ def health(session: SessionDep) -> dict[str, Any]:
         status_obj["checks"]["heartbeat"] = {"ok": False, "error": str(exc)}
 
     # ----- Methods framework. -----
-    in_memory = len(get_default_registry().list())
+    in_memory = len(get_default_registry().list_methods())
     try:
         db_count = session.scalar(select(func.count()).select_from(MethodRegistryRow))
         status_obj["checks"]["methods_framework"] = {

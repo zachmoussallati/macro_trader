@@ -146,7 +146,7 @@ def cmd_test_frontend(args: argparse.Namespace) -> None:
 def cmd_lint(args: argparse.Namespace) -> None:
     _run([_uv(), "run", "ruff", "check", "."])
     _run([_uv(), "run", "ruff", "format", "--check", "."])
-    _run([_uv(), "run", "mypy", "src", "api", "orchestration"])
+    _run([_uv(), "run", "mypy", "src/macro_trader", "api", "orchestration"])
     if (FRONTEND / "package.json").exists():
         _run([_pnpm(), "lint"], cwd=FRONTEND, check=False)
 

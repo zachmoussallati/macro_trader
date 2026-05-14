@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import (
     BigInteger,
@@ -57,7 +58,7 @@ class MethodRegistryRow(Base):
         ),
         nullable=False,
     )
-    metadata_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     status_changed_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     status_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -119,9 +120,9 @@ class MethodComparisonRow(Base):
     method_b_id: Mapped[str] = mapped_column(String(128), nullable=False)
     period_start: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     period_end: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
-    metrics: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    agreement: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    stability: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    metrics: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    agreement: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    stability: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
 
@@ -135,4 +136,4 @@ class HeartbeatRow(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     timestamp: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     source: Mapped[str] = mapped_column(String(64), nullable=False)
-    meta: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    meta: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)

@@ -128,7 +128,7 @@ def test_register_idempotent_same_metadata() -> None:
     m = IdentityMethod()
     reg.register(m, MethodStatus.BASELINE)
     reg.register(m, MethodStatus.BASELINE)  # second time is a no-op
-    assert len(reg.list()) == 1
+    assert len(reg.list_methods()) == 1
 
 
 @pytest.mark.unit
@@ -156,11 +156,11 @@ def test_list_filters_by_component_and_status() -> None:
     reg = MethodRegistry()
     reg.register(IdentityMethod(), MethodStatus.BASELINE)
     reg.register(NoisyIdentityMethod(), MethodStatus.SHADOW)
-    base = reg.list(status=MethodStatus.BASELINE)
-    shadow = reg.list(status=MethodStatus.SHADOW)
+    base = reg.list_methods(status=MethodStatus.BASELINE)
+    shadow = reg.list_methods(status=MethodStatus.SHADOW)
     assert len(base) == 1 and base[0].method_id == "trivial.identity.v1"
     assert len(shadow) == 1 and shadow[0].method_id == "trivial.noisy.v1"
-    comp = reg.list(component="trivial_component")
+    comp = reg.list_methods(component="trivial_component")
     assert len(comp) == 2
 
 
