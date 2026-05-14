@@ -69,13 +69,17 @@ def _docker_compose_cmd() -> list[str]:
 # Commands
 # ----------------------------------------------------------------------
 def cmd_setup(args: argparse.Namespace) -> None:
-    """Install all deps, init DB, create .env."""
+    """Install all deps, init DB, create .env, install pre-commit hooks."""
     _ensure_env_file()
     print("--- Python deps (uv sync) ---")
     _run([_uv(), "sync", "--extra", "dev"])
+    print("--- pre-commit hooks ---")
+    _run([_uv(), "run", "pre-commit", "install"], check=False)
     print("--- Frontend deps (pnpm install) ---")
     if (FRONTEND / "package.json").exists():
-        _run([_pnpm(), "install"], cwd=FRONTEND)
+        # pnpm install exits non-zero on the harmless ERR_PNPM_IGNORED_BUILDS
+        # warning; check=False so the rest of setup proceeds.
+        _run([_pnpm(), "install"], cwd=FRONTEND, check=False)
     else:
         print("(skipped: frontend/package.json not found)")
     print("--- Bringing up Docker services ---")

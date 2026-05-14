@@ -285,13 +285,19 @@ def _load_merged_config(env: str | None = None) -> dict[str, Any]:
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """Load and cache settings. Tests can call :func:`reset_settings_cache`."""
+    """Load and cache settings. Tests can call :func:`reset_settings_cache`.
+
+    In ``APP_ENV=test`` we deliberately skip ``.env`` loading so a developer's
+    real local secrets / API keys / DB URLs never bleed into the test harness.
+    Tests rely on ``conftest.py`` to set every var they need explicitly.
+    """
     import os
 
-    # Make sure .env is loaded into os.environ for pydantic-settings discovery.
-    from dotenv import load_dotenv
+    if os.environ.get("APP_ENV", "dev").lower() != "test":
+        # Make sure .env is loaded into os.environ for pydantic-settings discovery.
+        from dotenv import load_dotenv
 
-    load_dotenv(PROJECT_ROOT / ".env", override=False)
+        load_dotenv(PROJECT_ROOT / ".env", override=False)
 
     merged = _load_merged_config(os.environ.get("APP_ENV", "dev").lower())
     return Settings.model_validate(merged)

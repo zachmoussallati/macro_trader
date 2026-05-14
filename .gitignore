@@ -79,3 +79,4 @@ $RECYCLE.BIN/
 .claude/
 sync.log
 .vite/
+stage_*_prompt.md

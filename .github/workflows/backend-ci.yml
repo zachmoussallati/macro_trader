@@ -56,9 +56,16 @@ jobs:
       - name: Ruff (format check)
         run: uv run ruff format --check .
 
-      - name: Mypy
-        run: uv run mypy src api orchestration
-        continue-on-error: true   # informational in Stage 1
+      - name: Mypy (strict)
+        run: uv run mypy src/macro_trader api orchestration
+
+      - name: Alembic check (models match migrations)
+        # Apply migrations to the live test DB first, then verify autogenerate
+        # produces no pending diff. Fails CI if a model was added without a
+        # corresponding migration.
+        run: |
+          uv run alembic upgrade head
+          uv run alembic check
 
       - name: Pytest
         run: uv run pytest -v

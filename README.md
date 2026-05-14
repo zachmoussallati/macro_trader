@@ -41,10 +41,18 @@ later stage uses to compare baseline algorithms against enhancements.
 ## Quickstart
 
 ```powershell
-# Prereqs (one-time): uv, Node 20+, pnpm, Docker Desktop.
-python make.py setup                  # installs deps, brings up Postgres, runs migrations, seeds admin
+# Prereqs (one-time):
+#   - uv  (winget install astral-sh.uv)
+#   - Node 20.18.0 (see .nvmrc); newer majors work but the project targets 20.x
+#   - pnpm (npm install -g pnpm)
+#   - Docker Desktop
+python make.py setup                  # installs deps, pre-commit hooks, brings up Postgres, runs migrations, seeds admin
 python make.py dev-all                # FastAPI :8000, Dagster :3000, frontend :5173
 ```
+
+`python make.py setup` also installs git pre-commit hooks (ruff format +
+check, trailing-whitespace, EOF, yaml/toml validation). To skip: `git commit
+--no-verify` — but please run `python make.py lint` instead.
 
 Then:
 
