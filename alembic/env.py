@@ -27,20 +27,47 @@ config.set_main_option("sqlalchemy.url", settings.database.url)
 target_metadata = Base.metadata
 
 
+_TIMESCALE_SCHEMAS = frozenset(
+    {
+        "_timescaledb_cache",
+        "_timescaledb_catalog",
+        "_timescaledb_config",
+        "_timescaledb_internal",
+        "_timescaledb_functions",
+        "_timescaledb_debug",
+        "timescaledb_information",
+        "timescaledb_experimental",
+    }
+)
+
+
+# `create_hypertable` auto-creates a descending btree index named
+# `<table>_<time_col>_idx`. Skip these during autogenerate compare so
+# `alembic check` doesn't constantly want to drop them.
+_TIMESCALE_AUTO_INDEXES = frozenset(
+    {
+        "daily_bars_value_ts_idx",
+        "series_observations_observation_ts_idx",
+        "cot_weekly_report_ts_idx",
+        "eia_inventory_value_ts_idx",
+        "usda_reports_value_ts_idx",
+        "weather_data_value_ts_idx",
+        "google_trends_value_ts_idx",
+    }
+)
+
+
 def include_object(obj, name, type_, reflected, compare_to):  # type: ignore[no-untyped-def]
-    """Ignore TimescaleDB internal schemas during autogenerate."""
-    return not (
-        type_ == "schema"
-        and name
-        in (
-            "_timescaledb_cache",
-            "_timescaledb_catalog",
-            "_timescaledb_config",
-            "_timescaledb_internal",
-            "timescaledb_information",
-            "timescaledb_experimental",
-        )
-    )
+    """Skip TimescaleDB internal schemas, every object inside them, and the
+    auto-created hypertable indexes."""
+    if type_ == "schema" and name in _TIMESCALE_SCHEMAS:
+        return False
+    schema = getattr(obj, "schema", None)
+    if schema in _TIMESCALE_SCHEMAS:
+        return False
+    if type_ == "index" and reflected and name in _TIMESCALE_AUTO_INDEXES:
+        return False
+    return True
 
 
 def run_migrations_offline() -> None:

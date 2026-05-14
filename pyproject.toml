@@ -40,6 +40,12 @@ dependencies = [
     "scipy>=1.14.0",
     "statsmodels>=0.14.4",
     "scikit-learn>=1.5.2",
+    # Stage 2 — data sources
+    "fredapi>=0.5.2",
+    "yfinance>=0.2.50",
+    "pytrends>=4.9.2",
+    "pandas-market-calendars>=4.4.2",
+    "tenacity>=9.0.0",
 ]
 
 [project.optional-dependencies]
