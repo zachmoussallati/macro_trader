@@ -24,12 +24,8 @@ class EIAInventory(Base):
     )
 
     series_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    value_ts: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), primary_key=True
-    )
-    observation_ts: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), primary_key=True
-    )
+    value_ts: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), primary_key=True)
+    observation_ts: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), primary_key=True)
     value: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
     units: Mapped[str | None] = mapped_column(String(32), nullable=True)
     affected_instruments: Mapped[list[str]] = mapped_column(
@@ -56,13 +52,9 @@ class USDAReport(Base):
     report_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    value_ts: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), primary_key=True
-    )
+    value_ts: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), primary_key=True)
     report_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    observation_ts: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=False
-    )
+    observation_ts: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     commodity: Mapped[str] = mapped_column(String(32), nullable=False)
     metric: Mapped[str] = mapped_column(String(64), nullable=False)
     value: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
@@ -86,13 +78,9 @@ class WeatherData(Base):
     )
 
     station_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    value_ts: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), primary_key=True
-    )
+    value_ts: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), primary_key=True)
     metric: Mapped[str] = mapped_column(String(32), primary_key=True)
-    observation_ts: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), primary_key=True
-    )
+    observation_ts: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), primary_key=True)
     value: Mapped[float | None] = mapped_column(Numeric(20, 4), nullable=True)
     region: Mapped[str | None] = mapped_column(String(64), nullable=True)
     affected_instruments: Mapped[list[str]] = mapped_column(
@@ -114,12 +102,8 @@ class GoogleTrends(Base):
 
     query_term: Mapped[str] = mapped_column(String(128), primary_key=True)
     region: Mapped[str] = mapped_column(String(8), primary_key=True)
-    value_ts: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), primary_key=True
-    )
-    observation_ts: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), primary_key=True
-    )
+    value_ts: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), primary_key=True)
+    observation_ts: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), primary_key=True)
     value: Mapped[float | None] = mapped_column(Numeric(8, 2), nullable=True)
     affected_instruments: Mapped[list[str]] = mapped_column(
         ARRAY(String(32)), nullable=False, default=list

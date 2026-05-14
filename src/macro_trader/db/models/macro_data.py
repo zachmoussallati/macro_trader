@@ -14,7 +14,6 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
-    Text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -73,19 +72,11 @@ class SeriesObservation(Base):
         ForeignKey(f"{MACRO_DATA}.series.series_id", ondelete="CASCADE"),
         primary_key=True,
     )
-    value_ts: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), primary_key=True
-    )
-    observation_ts: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), primary_key=True
-    )
+    value_ts: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), primary_key=True)
+    observation_ts: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), primary_key=True)
     value: Mapped[float | None] = mapped_column(Numeric(28, 10), nullable=True)
-    realtime_start: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
-    realtime_end: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
+    realtime_start: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    realtime_end: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     is_initial: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     revision_number: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     source: Mapped[str] = mapped_column(String(32), nullable=False)

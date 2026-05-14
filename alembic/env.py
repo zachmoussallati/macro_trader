@@ -65,9 +65,7 @@ def include_object(obj, name, type_, reflected, compare_to):  # type: ignore[no-
     schema = getattr(obj, "schema", None)
     if schema in _TIMESCALE_SCHEMAS:
         return False
-    if type_ == "index" and reflected and name in _TIMESCALE_AUTO_INDEXES:
-        return False
-    return True
+    return not (type_ == "index" and reflected and name in _TIMESCALE_AUTO_INDEXES)
 
 
 def run_migrations_offline() -> None:

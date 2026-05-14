@@ -94,9 +94,12 @@ class LoggingSettings(BaseModel):
 
 
 class DataSourcesSettings(BaseModel):
-    """Placeholders for Stage 2+."""
+    """Free-tier external data sources."""
 
     fred_api_key: str = ""
+    eia_api_key: str = ""
+    usda_api_key: str = ""
+    noaa_api_key: str = ""
     alpha_vantage_api_key: str = ""
     quandl_api_key: str = ""
 
@@ -253,6 +256,12 @@ def _env_overrides() -> dict[str, Any]:
     ds = overrides["data_sources"]
     if (v := opt("FRED_API_KEY")) is not None:
         ds["fred_api_key"] = v
+    if (v := opt("EIA_API_KEY")) is not None:
+        ds["eia_api_key"] = v
+    if (v := opt("USDA_API_KEY")) is not None:
+        ds["usda_api_key"] = v
+    if (v := opt("NOAA_API_KEY")) is not None:
+        ds["noaa_api_key"] = v
     if (v := opt("ALPHA_VANTAGE_API_KEY")) is not None:
         ds["alpha_vantage_api_key"] = v
     if (v := opt("QUANDL_API_KEY")) is not None:

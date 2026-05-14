@@ -67,12 +67,8 @@ class DailyBar(Base):
         ForeignKey(f"{MARKET_DATA}.instruments.instrument_id", ondelete="CASCADE"),
         primary_key=True,
     )
-    value_ts: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), primary_key=True
-    )
-    observation_ts: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), primary_key=True
-    )
+    value_ts: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), primary_key=True)
+    observation_ts: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), primary_key=True)
     open: Mapped[float | None] = mapped_column(Numeric(20, 8), nullable=True)
     high: Mapped[float | None] = mapped_column(Numeric(20, 8), nullable=True)
     low: Mapped[float | None] = mapped_column(Numeric(20, 8), nullable=True)

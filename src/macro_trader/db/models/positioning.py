@@ -29,18 +29,14 @@ class COTWeekly(Base):
         {"schema": POSITIONING},
     )
 
-    report_ts: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), primary_key=True
-    )
+    report_ts: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), primary_key=True)
     instrument_id: Mapped[str] = mapped_column(
         String(32),
         ForeignKey("market_data.instruments.instrument_id", ondelete="CASCADE"),
         primary_key=True,
     )
     report_type: Mapped[str] = mapped_column(String(32), primary_key=True)
-    publication_ts: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=False
-    )
+    publication_ts: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     cftc_contract_code: Mapped[str] = mapped_column(String(16), nullable=False)
     open_interest: Mapped[float | None] = mapped_column(Numeric(24, 4), nullable=True)
     producer_long: Mapped[float | None] = mapped_column(Numeric(24, 4), nullable=True)
@@ -49,18 +45,10 @@ class COTWeekly(Base):
     swap_short: Mapped[float | None] = mapped_column(Numeric(24, 4), nullable=True)
     managed_money_long: Mapped[float | None] = mapped_column(Numeric(24, 4), nullable=True)
     managed_money_short: Mapped[float | None] = mapped_column(Numeric(24, 4), nullable=True)
-    other_reportable_long: Mapped[float | None] = mapped_column(
-        Numeric(24, 4), nullable=True
-    )
-    other_reportable_short: Mapped[float | None] = mapped_column(
-        Numeric(24, 4), nullable=True
-    )
-    nonreportable_long: Mapped[float | None] = mapped_column(
-        Numeric(24, 4), nullable=True
-    )
-    nonreportable_short: Mapped[float | None] = mapped_column(
-        Numeric(24, 4), nullable=True
-    )
+    other_reportable_long: Mapped[float | None] = mapped_column(Numeric(24, 4), nullable=True)
+    other_reportable_short: Mapped[float | None] = mapped_column(Numeric(24, 4), nullable=True)
+    nonreportable_long: Mapped[float | None] = mapped_column(Numeric(24, 4), nullable=True)
+    nonreportable_short: Mapped[float | None] = mapped_column(Numeric(24, 4), nullable=True)
     source: Mapped[str] = mapped_column(String(32), nullable=False, default="cftc")
     source_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     lineage_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
