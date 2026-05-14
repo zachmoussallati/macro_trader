@@ -103,11 +103,14 @@ def persist_signal_outputs(
                 "rank": _opt_float(o.rank),
                 "confidence": _opt_float(o.confidence),
                 "rolling_sharpe_252": _opt_float(o.rolling_sharpe_252),
-                "signal_metadata": dict(o.metadata or {}),
+                "metadata": dict(o.metadata or {}),
                 "lineage_id": lineage_id,
             }
         )
-    stmt = pg_insert(SignalValue).values(payload)
+    # Use the underlying Table for the insert so the `metadata` column doesn't
+    # collide with SQLAlchemy's `Base.metadata` attribute resolution.
+    table = SignalValue.__table__
+    stmt = pg_insert(table).values(payload)  # type: ignore[arg-type]
     stmt = stmt.on_conflict_do_update(
         index_elements=["signal_id", "instrument_id", "value_ts", "observation_ts"],
         set_={
@@ -116,13 +119,15 @@ def persist_signal_outputs(
             "rank": stmt.excluded.rank,
             "confidence": stmt.excluded.confidence,
             "rolling_sharpe_252": stmt.excluded.rolling_sharpe_252,
-            "metadata": stmt.excluded.signal_metadata,
+            "metadata": stmt.excluded.metadata,
             "lineage_id": stmt.excluded.lineage_id,
         },
     )
     result = session.execute(stmt)
     rowcount = getattr(result, "rowcount", None)
-    return int(rowcount) if rowcount else len(payload)
+    if rowcount is not None and rowcount > 0:
+        return int(rowcount)
+    return len(payload)
 
 
 def _opt_float(value: Any) -> float | None:

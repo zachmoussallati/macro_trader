@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +34,10 @@ export default function Home() {
       return apiMethods.listEvents({ from, to, importance: ["high"] });
     },
   });
+  const heatmap = useQuery({
+    queryKey: ["signals.heatmap.home"],
+    queryFn: apiMethods.signalHeatmap,
+  });
 
   const { email, logout } = useAuthStore();
 
@@ -45,12 +50,28 @@ export default function Home() {
   );
   const topEvents = (events.data ?? []).slice(0, 5);
 
+  // Cross-component composite per instrument: sum of (zscore * confidence)
+  // across components. Rank to find top 5 long + top 5 short.
+  const composites = useMemo(() => {
+    const by_inst: Record<string, number> = {};
+    for (const c of heatmap.data ?? []) {
+      if (c.zscore === null || c.confidence === null) continue;
+      by_inst[c.instrument_id] =
+        (by_inst[c.instrument_id] ?? 0) + c.zscore * c.confidence;
+    }
+    return Object.entries(by_inst)
+      .map(([instrument_id, score]) => ({ instrument_id, score }))
+      .sort((a, b) => b.score - a.score);
+  }, [heatmap.data]);
+  const topLong = composites.slice(0, 5);
+  const topShort = composites.slice(-5).reverse();
+
   return (
     <div className="mx-auto max-w-5xl p-8 space-y-6">
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-semibold">Macro Trader</h1>
-          <p className="text-muted-foreground">Stage 2 — Data Layer</p>
+          <p className="text-muted-foreground">Stage 3 — Signal Library Part 1</p>
         </div>
         <div className="flex items-center gap-3">
           {email ? (
@@ -159,6 +180,56 @@ export default function Home() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Top signals</CardTitle>
+          <CardDescription>
+            Cross-component composite: sum of (z-score × confidence) per instrument across
+            trend, carry, and value.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2">
+                Top 5 long
+              </h4>
+              <ul className="space-y-1 text-sm">
+                {topLong.length === 0 && (
+                  <li className="text-xs text-muted-foreground">
+                    Run compute_all_signals_job to populate.
+                  </li>
+                )}
+                {topLong.map(({ instrument_id, score }) => (
+                  <li key={instrument_id} className="flex justify-between font-mono text-xs">
+                    <span>{instrument_id}</span>
+                    <span>{score.toFixed(2)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2">
+                Top 5 short
+              </h4>
+              <ul className="space-y-1 text-sm">
+                {topShort.map(({ instrument_id, score }) => (
+                  <li key={instrument_id} className="flex justify-between font-mono text-xs">
+                    <span>{instrument_id}</span>
+                    <span>{score.toFixed(2)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          <div className="mt-3">
+            <Button asChild variant="outline" size="sm">
+              <Link to="/signals">Open /signals →</Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

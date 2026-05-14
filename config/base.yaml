@@ -51,3 +51,45 @@ methods:
     improvement_threshold: 0.05
   comparison_schedule:
     default_cron: "0 6 * * *"
+
+signals:
+  trend:
+    sma_short:
+      fast: 10
+      slow: 30
+    sma_medium:
+      fast: 20
+      slow: 60
+    sma_long:
+      fast: 50
+      slow: 200
+    hp_filter:
+      lambda: 1600
+    ensemble_weights:
+      sma_short: 0.333
+      sma_medium: 0.333
+      sma_long: 0.334
+    regime_conditional_weights:
+      enabled: false
+      weights_by_regime: {}
+  carry:
+    spot_proxy:
+      enabled_for: [CL, BZ, GC, NG]
+      confidence_when_proxy_available: 0.3
+      confidence_when_proxy_unavailable: 0.0
+  value:
+    zscore:
+      lookback_window: 252
+    cross_sectional:
+      sub_class_groups:
+        energy: [CL, BZ, NG, HO, RB]
+        base_metals: [HG, ALI]
+        precious_metals: [GC, SI, PL]
+        agriculture: [ZC, ZS, ZW]
+  output:
+    zscore_lookback: 252
+    rank_universe: all
+    rolling_sharpe_window: 252
+    rolling_sharpe_vol_target: 0.10
+  schedule:
+    daily_run_time_utc: "23:30"

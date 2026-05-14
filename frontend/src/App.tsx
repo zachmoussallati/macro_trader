@@ -5,6 +5,7 @@ import Data from "@/pages/Data";
 import Home from "@/pages/Home";
 import Login from "@/pages/Login";
 import Methods from "@/pages/Methods";
+import Signals from "@/pages/Signals";
 import { useAuthStore } from "@/stores/auth";
 
 const queryClient = new QueryClient({
@@ -45,6 +46,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <Calendar />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/signals"
+            element={
+              <ProtectedRoute>
+                <Signals />
               </ProtectedRoute>
             }
           />

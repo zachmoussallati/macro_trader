@@ -174,6 +174,44 @@ export interface CalendarEvent {
   metadata: Record<string, unknown>;
 }
 
+// ---------------- Stage 3: signals shapes ----------------
+export interface SignalMeta {
+  signal_id: string;
+  component: string;
+  name: string;
+  version: string;
+  status: "development" | "baseline" | "shadow" | "production" | "deprecated";
+}
+
+export interface SignalValueRow {
+  signal_id: string;
+  instrument_id: string;
+  value_ts: string;
+  observation_ts: string;
+  raw_value: number | null;
+  zscore: number | null;
+  rank: number | null;
+  confidence: number | null;
+  rolling_sharpe_252: number | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface HeatmapCell {
+  instrument_id: string;
+  component: string;
+  signal_id: string;
+  raw_value: number | null;
+  zscore: number | null;
+  rank: number | null;
+  confidence: number | null;
+  value_ts: string;
+}
+
+export interface DecayPoint {
+  value_ts: string;
+  rolling_sharpe_252: number | null;
+}
+
 export const apiMethods = {
   // ----- core -----
   health: () => api.get<HealthResponse>("/health"),
@@ -206,4 +244,31 @@ export const apiMethods = {
     (params.importance ?? []).forEach((i) => q.append("importance", i));
     return api.get<CalendarEvent[]>(`/calendar/events?${q.toString()}`);
   },
+
+  // ----- signals -----
+  listSignals: () => api.get<SignalMeta[]>("/signals"),
+  signalHeatmap: () => api.get<HeatmapCell[]>("/signals/heatmap"),
+  latestSignalValues: (instrument?: string) =>
+    api.get<SignalValueRow[]>(
+      `/signals/values${instrument ? `?instrument=${encodeURIComponent(instrument)}` : ""}`,
+    ),
+  signalValues: (
+    signalId: string,
+    params: { instrument?: string; limit?: number } = {},
+  ) => {
+    const q = new URLSearchParams();
+    if (params.instrument) q.set("instrument", params.instrument);
+    if (params.limit) q.set("limit", String(params.limit));
+    return api.get<SignalValueRow[]>(
+      `/signals/${encodeURIComponent(signalId)}/values?${q.toString()}`,
+    );
+  },
+  signalDecay: (signalId: string, lookbackDays = 365) =>
+    api.get<DecayPoint[]>(
+      `/signals/${encodeURIComponent(signalId)}/decay?lookback_days=${lookbackDays}`,
+    ),
+  signalComparisons: (component?: string) =>
+    api.get<unknown[]>(
+      `/signals/comparisons${component ? `?component=${encodeURIComponent(component)}` : ""}`,
+    ),
 };
