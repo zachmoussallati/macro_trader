@@ -23,14 +23,16 @@ from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
-# Force test env before any imports that read config.
-os.environ.setdefault("APP_ENV", "test")
-os.environ.setdefault("POSTGRES_DB", "macro_trader_test")
+# Force test env before any imports that read config. We OVERWRITE rather
+# than setdefault so a caller's shell exports (e.g. POSTGRES_DB=macro_trader
+# in a dev session) don't bleed into the test DB.
+os.environ["APP_ENV"] = "test"
+os.environ["POSTGRES_DB"] = "macro_trader_test"
 os.environ.setdefault("POSTGRES_PASSWORD", "change_me_dev_password")
 os.environ.setdefault("POSTGRES_USER", "macro")
 os.environ.setdefault("POSTGRES_HOST", "localhost")
 os.environ.setdefault("POSTGRES_PORT", "5432")
-os.environ.setdefault("DATABASE_URL", "")  # let config rebuild from parts
+os.environ["DATABASE_URL"] = ""  # let config rebuild from parts
 
 
 @pytest.fixture(scope="session", autouse=True)

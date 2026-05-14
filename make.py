@@ -101,7 +101,13 @@ def cmd_dev_dagster(args: argparse.Namespace) -> None:
 
 
 def cmd_dev_frontend(args: argparse.Namespace) -> None:
-    _run([_pnpm(), "dev"], cwd=FRONTEND)
+    # Call vite directly via node_modules/.bin to bypass pnpm's auto-install
+    # check (it exits non-zero on the harmless ERR_PNPM_IGNORED_BUILDS warning).
+    binname = "vite.cmd" if os.name == "nt" else "vite"
+    vite = FRONTEND / "node_modules" / ".bin" / binname
+    if not vite.exists():
+        _run([_pnpm(), "install"], cwd=FRONTEND, check=False)
+    _run([str(vite)], cwd=FRONTEND)
 
 
 def cmd_dev_all(args: argparse.Namespace) -> None:

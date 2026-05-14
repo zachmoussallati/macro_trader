@@ -19,7 +19,7 @@ from macro_trader.utils.dates import utcnow
     group_name="system",
     description="Pipeline liveness pulse. Writes one row to system.heartbeat per tick.",
 )
-def heartbeat_asset(context: Any) -> MaterializeResult:
+def heartbeat_asset(context) -> MaterializeResult:
     now = utcnow()
     meta: dict[str, Any] = {
         "run_id": context.run_id,
