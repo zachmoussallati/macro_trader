@@ -43,8 +43,7 @@ def get_sessionmaker() -> sessionmaker[Session]:
 @contextmanager
 def get_session() -> Iterator[Session]:
     """Context-managed session. Commits on success, rolls back on exception."""
-    SessionLocal = get_sessionmaker()
-    session = SessionLocal()
+    session = get_sessionmaker()()
     try:
         yield session
         session.commit()

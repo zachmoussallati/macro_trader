@@ -7,14 +7,15 @@ sqlalchemy.url is used everywhere. ``version_table_schema`` is pinned to
 
 from __future__ import annotations
 
+import contextlib
 from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+import macro_trader.db.models  # noqa: F401 — registers models with metadata
 from macro_trader.config import get_settings
 from macro_trader.db.base import Base
-import macro_trader.db.models  # noqa: F401 — registers models with metadata
 
 config = context.config
 if config.config_file_name is not None:
@@ -28,11 +29,18 @@ target_metadata = Base.metadata
 
 def include_object(obj, name, type_, reflected, compare_to):  # type: ignore[no-untyped-def]
     """Ignore TimescaleDB internal schemas during autogenerate."""
-    if type_ == "schema" and name in ("_timescaledb_cache", "_timescaledb_catalog",
-                                       "_timescaledb_config", "_timescaledb_internal",
-                                       "timescaledb_information", "timescaledb_experimental"):
-        return False
-    return True
+    return not (
+        type_ == "schema"
+        and name
+        in (
+            "_timescaledb_cache",
+            "_timescaledb_catalog",
+            "_timescaledb_config",
+            "_timescaledb_internal",
+            "timescaledb_information",
+            "timescaledb_experimental",
+        )
+    )
 
 
 def run_migrations_offline() -> None:
@@ -54,12 +62,26 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations against a live DB."""
+    from sqlalchemy import text
+
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
+        # Ensure required extensions exist BEFORE alembic tries to create
+        # uuid-defaulted columns. Idempotent.
+        connection.execute(text('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"'))
+        # TimescaleDB ships with the timescaledb/timescaledb image but must
+        # be enabled per database. Best-effort: tests that don't need it
+        # will pass regardless.
+        with contextlib.suppress(Exception):
+            connection.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb"))
+        # Ensure the `system` schema exists BEFORE alembic tries to create
+        # its version table inside it.
+        connection.execute(text('CREATE SCHEMA IF NOT EXISTS "system"'))
+        connection.commit()
         context.configure(
             connection=connection,
             target_metadata=target_metadata,

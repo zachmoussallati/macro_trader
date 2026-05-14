@@ -77,9 +77,7 @@ class MethodRegistry:
                     )
                 # Idempotent: same metadata, possibly status update.
                 if self._statuses[method_id] != status:
-                    self.set_status(
-                        method_id, status, reason=reason, session=session
-                    )
+                    self.set_status(method_id, status, reason=reason, session=session)
                 return
 
             self._methods[method_id] = method
@@ -164,9 +162,9 @@ class MethodRegistry:
     def shadows_for(self, component: str) -> list[Method[Any, Any]]:
         with self._lock:
             return [
-                m for mid, m in self._methods.items()
-                if m.metadata.component == component
-                and self._statuses[mid] == MethodStatus.SHADOW
+                m
+                for mid, m in self._methods.items()
+                if m.metadata.component == component and self._statuses[mid] == MethodStatus.SHADOW
             ]
 
     def clear(self) -> None:
@@ -178,14 +176,9 @@ class MethodRegistry:
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
-    def _find_one(
-        self, component: str, status: MethodStatus
-    ) -> Method[Any, Any] | None:
+    def _find_one(self, component: str, status: MethodStatus) -> Method[Any, Any] | None:
         for mid, method in self._methods.items():
-            if (
-                method.metadata.component == component
-                and self._statuses[mid] == status
-            ):
+            if method.metadata.component == component and self._statuses[mid] == status:
                 return method
         return None
 
@@ -208,9 +201,7 @@ class MethodRegistry:
                 old = self._statuses[mid]
                 self._statuses[mid] = MethodStatus.DEPRECATED
                 if session is not None:
-                    self._db_update_status(
-                        mid, old, MethodStatus.DEPRECATED, reason, session
-                    )
+                    self._db_update_status(mid, old, MethodStatus.DEPRECATED, reason, session)
 
     def _db_upsert(
         self,

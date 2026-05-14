@@ -10,8 +10,7 @@ from __future__ import annotations
 
 import pickle
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
 import numpy as np
 import pytest
@@ -61,7 +60,7 @@ class IdentityMethod(Method[np.ndarray, np.ndarray]):
         return pickle.dumps(self._state)
 
     @classmethod
-    def deserialize(cls, blob: bytes) -> "IdentityMethod":
+    def deserialize(cls, blob: bytes) -> IdentityMethod:
         m = cls()
         m._state = pickle.loads(blob)
         return m
@@ -91,7 +90,7 @@ class NoisyIdentityMethod(Method[np.ndarray, np.ndarray]):
         return pickle.dumps(self._noise)
 
     @classmethod
-    def deserialize(cls, blob: bytes) -> "NoisyIdentityMethod":
+    def deserialize(cls, blob: bytes) -> NoisyIdentityMethod:
         return cls(noise=pickle.loads(blob))
 
 
@@ -233,8 +232,8 @@ def test_identity_comparator_runs_and_returns_valid_result() -> None:
     b.fit(np.zeros(1))
     comparator = IdentityComparator()
     data = np.linspace(-1, 1, 32)
-    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    end = datetime(2026, 2, 1, tzinfo=timezone.utc)
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    end = datetime(2026, 2, 1, tzinfo=UTC)
     result = comparator.compare(a, b, data, start, end, notes="smoke")
     assert isinstance(result, ComparisonResult)
     assert result.method_a_id == "trivial.identity.v1"
@@ -249,8 +248,9 @@ def test_comparator_rejects_wrong_component() -> None:
     m = IdentityMethod()
     m.metadata = MethodMetadata("x", "other_component", "X", "1", "")
     with pytest.raises(ValueError):
-        comparator.compare(m, m, np.zeros(4), datetime(2026, 1, 1, tzinfo=timezone.utc),
-                            datetime(2026, 1, 2, tzinfo=timezone.utc))
+        comparator.compare(
+            m, m, np.zeros(4), datetime(2026, 1, 1, tzinfo=UTC), datetime(2026, 1, 2, tzinfo=UTC)
+        )
 
 
 # ----------------------------------------------------------------------

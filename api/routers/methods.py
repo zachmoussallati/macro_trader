@@ -132,9 +132,7 @@ def list_comparisons(
 def get_comparison(comparison_id: str, session: SessionDep) -> ComparisonOut:
     row = session.get(MethodComparisonRow, comparison_id)
     if row is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="comparison not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="comparison not found")
     return ComparisonOut.model_validate(row, from_attributes=True)
 
 
@@ -142,18 +140,14 @@ def get_comparison(comparison_id: str, session: SessionDep) -> ComparisonOut:
 def get_method_endpoint(method_id: str, session: SessionDep) -> MethodOut:
     row = session.get(MethodRegistryRow, method_id)
     if row is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="method not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="method not found")
     return _row_to_method_out(row)
 
 
 @router.get("/{method_id}/history", response_model=list[MethodStatusHistoryOut])
 def get_method_history(method_id: str, session: SessionDep) -> list[MethodStatusHistoryOut]:
     if session.get(MethodRegistryRow, method_id) is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="method not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="method not found")
     stmt = (
         select(MethodStatusHistoryRow)
         .where(MethodStatusHistoryRow.method_id == method_id)
@@ -172,9 +166,7 @@ def set_method_status(
 ) -> MethodOut:
     row = session.get(MethodRegistryRow, method_id)
     if row is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="method not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="method not found")
     old_status = row.status
     new_status = payload.status
     if new_status == old_status:
@@ -191,12 +183,13 @@ def set_method_status(
             reason=payload.reason,
         )
     )
-    # Reflect in in-process registry if loaded.
+    # Reflect in in-process registry if loaded. DB is authoritative if the
+    # method isn't loaded in this process.
+    import contextlib
+
     registry = get_default_registry()
-    try:
+    with contextlib.suppress(KeyError):
         registry.set_status(method_id, new_status, reason=payload.reason)
-    except KeyError:
-        pass  # method not loaded in this process; DB is authoritative
     session.commit()
     session.refresh(row)
     return _row_to_method_out(row)

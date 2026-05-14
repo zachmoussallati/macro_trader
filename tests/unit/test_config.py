@@ -67,9 +67,7 @@ def test_database_url_is_assembled_when_not_explicitly_set(monkeypatch: pytest.M
     monkeypatch.delenv("DATABASE_URL", raising=False)
     reset_settings_cache()
     s = get_settings()
-    assert s.database.url == (
-        "postgresql+psycopg://u:p@db.example.com:5433/macro_trader_test"
-    )
+    assert s.database.url == ("postgresql+psycopg://u:p@db.example.com:5433/macro_trader_test")
 
     # Restore so other tests don't see the override.
     monkeypatch.delenv("POSTGRES_HOST", raising=False)

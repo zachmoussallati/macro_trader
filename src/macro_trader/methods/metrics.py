@@ -65,12 +65,7 @@ def output_agreement(output_a: Any, output_b: Any) -> dict[str, float]:
     # Numeric outputs.
     arr_a = _to_array(output_a)
     arr_b = _to_array(output_b)
-    if (
-        arr_a is None
-        or arr_b is None
-        or arr_a.size != arr_b.size
-        or arr_a.size < 2
-    ):
+    if arr_a is None or arr_b is None or arr_a.size != arr_b.size or arr_a.size < 2:
         return out
 
     # Strip NaNs jointly.
@@ -129,7 +124,7 @@ def output_stability(
         try:
             out_a = _to_array(method_a.predict(perturbed))
             out_b = _to_array(method_b.predict(perturbed))
-        except Exception:  # noqa: BLE001
+        except Exception:
             continue
         if out_a is None or out_b is None:
             continue

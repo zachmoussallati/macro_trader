@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Generic, TypeVar
+from typing import TypeVar
 
 InputT = TypeVar("InputT")
 OutputT = TypeVar("OutputT")
@@ -46,7 +46,7 @@ class MethodMetadata:
     """Papers, blog posts, internal docs. URLs or citations."""
 
 
-class Method(ABC, Generic[InputT, OutputT]):
+class Method[InputT, OutputT](ABC):
     """Abstract base for any swappable algorithm in the pipeline.
 
     Subclasses MUST set the class attribute :attr:`metadata` and implement

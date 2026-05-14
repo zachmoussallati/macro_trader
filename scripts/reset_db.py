@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import sys
 
+from scripts.setup_db import run_alembic_upgrade, seed_admin_user
 from sqlalchemy import create_engine, text
 
 from macro_trader.config import get_settings
 from macro_trader.logging_setup import get_logger
-from scripts.setup_db import run_alembic_upgrade, seed_admin_user
 
 
 def main() -> None:

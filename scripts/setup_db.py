@@ -61,16 +61,13 @@ def run_alembic_upgrade() -> None:
 
 def seed_admin_user() -> None:
     """Create the admin user from `.env` credentials if it doesn't exist."""
-    from sqlalchemy import select
-
     from api.auth.jwt import hash_password
+    from sqlalchemy import select
 
     log = get_logger("scripts.setup_db")
     settings = get_settings()
     with get_session() as session:
-        existing = session.scalar(
-            select(User).where(User.email == settings.auth.admin_email)
-        )
+        existing = session.scalar(select(User).where(User.email == settings.auth.admin_email))
         if existing is not None:
             log.info("scripts.setup_db.admin_exists", email=settings.auth.admin_email)
             return

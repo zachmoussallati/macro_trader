@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import pickle
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 import pytest
@@ -18,7 +17,6 @@ from macro_trader.methods.comparator import MethodComparator
 from macro_trader.methods.promotion import PromotionCriteria, evaluate_promotion
 from macro_trader.methods.registry import MethodRegistry
 from macro_trader.methods.status import MethodStatus
-from macro_trader.utils.dates import utcnow
 
 
 # ----- Test doubles (mirrors tests.unit.test_methods_framework) -----
@@ -43,7 +41,7 @@ class _Identity(Method[np.ndarray, np.ndarray]):
         return b""
 
     @classmethod
-    def deserialize(cls, blob: bytes) -> "_Identity":
+    def deserialize(cls, blob: bytes) -> _Identity:
         return cls()
 
 
@@ -88,11 +86,7 @@ def test_register_method_persists_to_db(db_session) -> None:
     assert row.component == "int_component"
 
     # And a history row.
-    history = (
-        db_session.query(MethodStatusHistoryRow)
-        .filter_by(method_id="int.identity.v1")
-        .all()
-    )
+    history = db_session.query(MethodStatusHistoryRow).filter_by(method_id="int.identity.v1").all()
     assert len(history) == 1
     assert history[0].new_status == MethodStatus.BASELINE
     assert history[0].old_status is None
@@ -103,9 +97,7 @@ def test_set_status_appends_history(db_session) -> None:
     reg = MethodRegistry()
     m = _NoisyIdentity()
     reg.register(m, MethodStatus.DEVELOPMENT, session=db_session, reason="seed")
-    reg.set_status(
-        "int.noisy.v1", MethodStatus.SHADOW, reason="ready", session=db_session
-    )
+    reg.set_status("int.noisy.v1", MethodStatus.SHADOW, reason="ready", session=db_session)
     db_session.flush()
     history = (
         db_session.query(MethodStatusHistoryRow)
@@ -127,8 +119,8 @@ def test_comparator_persists_result(db_session) -> None:
         a,
         b,
         np.linspace(-1, 1, 16),
-        period_start=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        period_end=datetime(2026, 2, 1, tzinfo=timezone.utc),
+        period_start=datetime(2026, 1, 1, tzinfo=UTC),
+        period_end=datetime(2026, 2, 1, tzinfo=UTC),
         notes="t",
         session=db_session,
     )
@@ -170,8 +162,8 @@ def test_promotion_gate_eligible_when_criteria_met(db_session) -> None:
             _Identity(),
             _NoisyIdentity(),
             np.linspace(-1, 1, 8),
-            period_start=datetime(2026, 1, i + 1, tzinfo=timezone.utc),
-            period_end=datetime(2026, 1, i + 2, tzinfo=timezone.utc),
+            period_start=datetime(2026, 1, i + 1, tzinfo=UTC),
+            period_end=datetime(2026, 1, i + 2, tzinfo=UTC),
             session=db_session,
         )
     db_session.flush()
@@ -187,6 +179,4 @@ def test_promotion_gate_eligible_when_criteria_met(db_session) -> None:
         session=db_session,
     )
     assert eligible is True, evidence
-    assert all(
-        v["pass"] for v in evidence["checks"]["required_improvements"].values()
-    )
+    assert all(v["pass"] for v in evidence["checks"]["required_improvements"].values())

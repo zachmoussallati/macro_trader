@@ -26,7 +26,7 @@ auth:
   jwt_algorithm: HS256
   access_token_expire_minutes: 60
   refresh_token_expire_days: 30
-  admin_email: admin@macro-trader.local
+  admin_email: admin@example.com
 
 dagster:
   home: ./dagster_home

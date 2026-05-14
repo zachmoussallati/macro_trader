@@ -1,0 +1,64 @@
+name: backend-ci
+
+on:
+  push:
+    branches: [clean_branch, main]
+  pull_request:
+    branches: [clean_branch, main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_DB: macro_trader
+          POSTGRES_USER: macro
+          POSTGRES_PASSWORD: change_me_dev_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U macro -d macro_trader"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      APP_ENV: test
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: macro
+      POSTGRES_PASSWORD: change_me_dev_password
+      POSTGRES_DB: macro_trader
+      POSTGRES_TEST_DB: macro_trader_test
+      JWT_SECRET_KEY: ci_only_replace_with_real_secret_in_prod_long_enough_string
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Ruff (check)
+        run: uv run ruff check .
+
+      - name: Ruff (format check)
+        run: uv run ruff format --check .
+
+      - name: Mypy
+        run: uv run mypy src api orchestration
+        continue-on-error: true   # informational in Stage 1
+
+      - name: Pytest
+        run: uv run pytest -v

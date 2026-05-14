@@ -19,7 +19,6 @@ from structlog.types import Processor
 
 from macro_trader.config import get_settings
 
-
 _configured = False
 
 

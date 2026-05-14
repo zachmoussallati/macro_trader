@@ -47,11 +47,11 @@ class MethodStatus(StrEnum):
     """Retired method. Kept in the registry for historical reproducibility."""
 
     @classmethod
-    def terminal(cls) -> frozenset["MethodStatus"]:
+    def terminal(cls) -> frozenset[MethodStatus]:
         """Statuses from which no further transition is expected."""
         return frozenset({cls.DEPRECATED})
 
     @classmethod
-    def drives_decisions(cls) -> frozenset["MethodStatus"]:
+    def drives_decisions(cls) -> frozenset[MethodStatus]:
         """Statuses whose methods drive decisions (one of these runs in prod)."""
         return frozenset({cls.BASELINE, cls.PRODUCTION})

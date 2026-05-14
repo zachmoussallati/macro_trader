@@ -54,9 +54,7 @@ class APISettings(BaseModel):
     host: str = "0.0.0.0"
     port: int = 8000
     reload: bool = True
-    cors_origins: list[str] = Field(
-        default_factory=lambda: ["http://localhost:5173"]
-    )
+    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -71,7 +69,7 @@ class AuthSettings(BaseModel):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 30
-    admin_email: str = "admin@macro-trader.local"
+    admin_email: str = "admin@example.com"
     admin_password: str = "change_me"
 
 
@@ -185,7 +183,16 @@ def _env_overrides() -> dict[str, Any]:
         v = os.environ.get(name)
         return v if v not in (None, "") else None
 
-    overrides: dict[str, Any] = {"database": {}, "auth": {}, "api": {}, "dagster": {}, "claude_api": {}, "data_sources": {}, "frontend": {}, "logging": {}}
+    overrides: dict[str, Any] = {
+        "database": {},
+        "auth": {},
+        "api": {},
+        "dagster": {},
+        "claude_api": {},
+        "data_sources": {},
+        "frontend": {},
+        "logging": {},
+    }
 
     # Database
     db = overrides["database"]

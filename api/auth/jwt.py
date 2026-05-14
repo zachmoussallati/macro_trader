@@ -34,9 +34,7 @@ def create_access_token(subject: str, settings: Settings, **extra: Any) -> str:
         "type": "access",
         **extra,
     }
-    return jwt.encode(
-        payload, settings.auth.jwt_secret_key, algorithm=settings.auth.jwt_algorithm
-    )
+    return jwt.encode(payload, settings.auth.jwt_secret_key, algorithm=settings.auth.jwt_algorithm)
 
 
 def decode_access_token(token: str, settings: Settings) -> dict[str, Any] | None:

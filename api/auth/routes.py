@@ -32,9 +32,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def register(payload: RegisterRequest, session: SessionDep) -> User:
     existing = session.scalar(select(User).where(User.email == payload.email))
     if existing is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
     user = User(
         email=payload.email,
         hashed_password=hash_password(payload.password),
@@ -77,20 +75,14 @@ def _issue_token_pair(
 def login(payload: LoginRequest, session: SessionDep, settings: SettingsDep) -> TokenPair:
     user = session.scalar(select(User).where(User.email == payload.email))
     if user is None or not verify_password(payload.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="User is inactive"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is inactive")
     return _issue_token_pair(user, session, settings)
 
 
 @router.post("/refresh", response_model=TokenPair)
-def refresh(
-    payload: RefreshRequest, session: SessionDep, settings: SettingsDep
-) -> TokenPair:
+def refresh(payload: RefreshRequest, session: SessionDep, settings: SettingsDep) -> TokenPair:
     candidates = session.scalars(
         select(RefreshTokenRow).where(RefreshTokenRow.revoked.is_(False))
     ).all()

@@ -50,8 +50,8 @@ def test_settings() -> Any:
 
 def _postgres_reachable(settings: Any) -> bool:
     url = settings.database.url.replace(settings.database.name, "postgres")
+    engine = create_engine(url, connect_args={"connect_timeout": 2})
     try:
-        engine = create_engine(url, connect_args={"connect_timeout": 2})
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         return True
@@ -59,6 +59,8 @@ def _postgres_reachable(settings: Any) -> bool:
         return False
     except Exception:
         return False
+    finally:
+        engine.dispose()
 
 
 @pytest.fixture(scope="session")
@@ -67,17 +69,18 @@ def pg_engine(test_settings: Any) -> Generator[Engine, None, None]:
     if not _postgres_reachable(test_settings):
         pytest.skip("Postgres not reachable; skipping integration tests")
 
-    admin_url = test_settings.database.url.replace(
-        test_settings.database.name, "postgres"
-    )
+    admin_url = test_settings.database.url.replace(test_settings.database.name, "postgres")
     admin_engine = create_engine(admin_url, isolation_level="AUTOCOMMIT")
-    with admin_engine.connect() as conn:
-        exists = conn.execute(
-            text("SELECT 1 FROM pg_database WHERE datname = :n"),
-            {"n": test_settings.database.name},
-        ).first()
-        if exists is None:
-            conn.execute(text(f'CREATE DATABASE "{test_settings.database.name}"'))
+    try:
+        with admin_engine.connect() as conn:
+            exists = conn.execute(
+                text("SELECT 1 FROM pg_database WHERE datname = :n"),
+                {"n": test_settings.database.name},
+            ).first()
+            if exists is None:
+                conn.execute(text(f'CREATE DATABASE "{test_settings.database.name}"'))
+    finally:
+        admin_engine.dispose()
 
     engine = create_engine(test_settings.database.url, future=True)
 

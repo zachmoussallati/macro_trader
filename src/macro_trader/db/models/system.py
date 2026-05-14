@@ -15,12 +15,14 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
-    Enum as SAEnum,
     ForeignKey,
     Index,
     LargeBinary,
     String,
     Text,
+)
+from sqlalchemy import (
+    Enum as SAEnum,
 )
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -46,14 +48,18 @@ class MethodRegistryRow(Base):
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     version: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[MethodStatus] = mapped_column(
-        SAEnum(MethodStatus, name="method_status", schema=SYSTEM, native_enum=True),
+        SAEnum(
+            MethodStatus,
+            name="method_status",
+            schema=SYSTEM,
+            native_enum=True,
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=False,
     )
     metadata_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
-    status_changed_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=False
-    )
+    status_changed_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     status_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
     serialized_blob: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
 
@@ -67,20 +73,30 @@ class MethodStatusHistoryRow(Base):
         {"schema": SYSTEM},
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     method_id: Mapped[str] = mapped_column(
         String(128),
         ForeignKey(f"{SYSTEM}.methods_registry.method_id", ondelete="CASCADE"),
         nullable=False,
     )
     old_status: Mapped[MethodStatus | None] = mapped_column(
-        SAEnum(MethodStatus, name="method_status", schema=SYSTEM, create_type=False),
+        SAEnum(
+            MethodStatus,
+            name="method_status",
+            schema=SYSTEM,
+            create_type=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=True,
     )
     new_status: Mapped[MethodStatus] = mapped_column(
-        SAEnum(MethodStatus, name="method_status", schema=SYSTEM, create_type=False),
+        SAEnum(
+            MethodStatus,
+            name="method_status",
+            schema=SYSTEM,
+            create_type=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=False,
     )
     changed_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)

@@ -118,9 +118,7 @@ class MethodComparator(ABC, Generic[InputT, OutputT]):
         """Component-specific metrics (e.g. Sharpe of resulting signal, hit
         rate, calibration error, drawdown, etc.). Subclasses override this."""
 
-    def _compute_agreement(
-        self, output_a: OutputT, output_b: OutputT
-    ) -> dict[str, float]:
+    def _compute_agreement(self, output_a: OutputT, output_b: OutputT) -> dict[str, float]:
         """Default agreement: correlation + exact-match rate if applicable."""
         from macro_trader.methods.metrics import output_agreement
 

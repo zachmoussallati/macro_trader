@@ -35,14 +35,16 @@ def health(session: SessionDep) -> dict[str, Any]:
     try:
         session.execute(text("SELECT 1"))
         status_obj["checks"]["database"] = {"ok": True}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         status_obj["checks"]["database"] = {"ok": False, "error": str(exc)}
 
     # ----- TimescaleDB presence. -----
     try:
-        ts = session.execute(text("SELECT extversion FROM pg_extension WHERE extname = 'timescaledb'")).scalar()
+        ts = session.execute(
+            text("SELECT extversion FROM pg_extension WHERE extname = 'timescaledb'")
+        ).scalar()
         status_obj["checks"]["timescaledb"] = {"ok": ts is not None, "version": ts}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         status_obj["checks"]["timescaledb"] = {"ok": False, "error": str(exc)}
 
     # ----- Latest heartbeat. -----
@@ -54,7 +56,7 @@ def health(session: SessionDep) -> dict[str, Any]:
             "ok": latest is not None,
             "latest": latest.isoformat() if latest is not None else None,
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         status_obj["checks"]["heartbeat"] = {"ok": False, "error": str(exc)}
 
     # ----- Methods framework. -----
@@ -66,7 +68,7 @@ def health(session: SessionDep) -> dict[str, Any]:
             "in_memory_registry_size": in_memory,
             "db_registry_size": int(db_count or 0),
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         status_obj["checks"]["methods_framework"] = {
             "ok": False,
             "error": str(exc),

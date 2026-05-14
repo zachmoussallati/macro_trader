@@ -14,7 +14,7 @@ dependencies = [
     "sqlalchemy>=2.0.36",
     "psycopg[binary]>=3.2.3",
     "alembic>=1.14.0",
-    "pydantic>=2.10.0",
+    "pydantic[email]>=2.10.0",
     "pydantic-settings>=2.6.0",
     "pyyaml>=6.0.2",
     "python-dotenv>=1.0.1",
@@ -94,6 +94,8 @@ ignore = [
     "E501",   # line length — handled by formatter
     "B008",   # function calls in defaults (FastAPI's Depends idiom)
     "N818",   # exception suffix
+    "UP046",  # PEP 695 class type params — we keep Generic[] for cross-module TypeVar reuse
+    "RUF012", # mutable class default — SQLAlchemy __table_args__ idiom
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -150,6 +152,8 @@ filterwarnings = [
     "error",
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",
+    "ignore::ResourceWarning",
+    "ignore::pytest.PytestUnraisableExceptionWarning",
 ]
 
 [tool.coverage.run]

@@ -76,4 +76,5 @@ $RECYCLE.BIN/
 *.bak
 *.tmp
 *.cache
-.claude/.cache/
+.claude/
+sync.log

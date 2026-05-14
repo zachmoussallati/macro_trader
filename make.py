@@ -13,7 +13,6 @@ import os
 import shlex
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -23,13 +22,18 @@ FRONTEND = ROOT / "frontend"
 # ----------------------------------------------------------------------
 # Shell helpers
 # ----------------------------------------------------------------------
-def _run(cmd: str | list[str], *, cwd: Path | None = None, check: bool = True,
-         env: dict[str, str] | None = None) -> int:
+def _run(
+    cmd: str | list[str],
+    *,
+    cwd: Path | None = None,
+    check: bool = True,
+    env: dict[str, str] | None = None,
+) -> int:
     """Run a shell command. Returns the exit code."""
     if isinstance(cmd, str):
         display = cmd
         argv = cmd if os.name == "nt" else shlex.split(cmd)
-        shell = True if os.name == "nt" else False
+        shell = os.name == "nt"
     else:
         display = " ".join(cmd)
         argv = cmd
@@ -64,7 +68,7 @@ def _docker_compose_cmd() -> list[str]:
 # ----------------------------------------------------------------------
 # Commands
 # ----------------------------------------------------------------------
-def cmd_setup(args: argparse.Namespace) -> None:  # noqa: ARG001
+def cmd_setup(args: argparse.Namespace) -> None:
     """Install all deps, init DB, create .env."""
     _ensure_env_file()
     print("--- Python deps (uv sync) ---")
@@ -81,23 +85,26 @@ def cmd_setup(args: argparse.Namespace) -> None:  # noqa: ARG001
     print("Setup complete. Next: `python make.py dev-all`")
 
 
-def cmd_dev_backend(args: argparse.Namespace) -> None:  # noqa: ARG001
-    _run([_uv(), "run", "uvicorn", "api.main:app", "--host", "0.0.0.0",
-          "--port", "8000", "--reload"])
+def cmd_dev_backend(args: argparse.Namespace) -> None:
+    _run(
+        [_uv(), "run", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    )
 
 
-def cmd_dev_dagster(args: argparse.Namespace) -> None:  # noqa: ARG001
+def cmd_dev_dagster(args: argparse.Namespace) -> None:
     env = {"DAGSTER_HOME": str(ROOT / "dagster_home")}
     (ROOT / "dagster_home").mkdir(exist_ok=True)
-    _run([_uv(), "run", "dagster", "dev", "-f", "orchestration/definitions.py",
-          "-p", "3000"], env=env)
+    _run(
+        [_uv(), "run", "dagster", "dev", "-f", "orchestration/definitions.py", "-p", "3000"],
+        env=env,
+    )
 
 
-def cmd_dev_frontend(args: argparse.Namespace) -> None:  # noqa: ARG001
+def cmd_dev_frontend(args: argparse.Namespace) -> None:
     _run([_pnpm(), "dev"], cwd=FRONTEND)
 
 
-def cmd_dev_all(args: argparse.Namespace) -> None:  # noqa: ARG001
+def cmd_dev_all(args: argparse.Namespace) -> None:
     """Start FastAPI + Dagster + frontend concurrently."""
     print("Starting backend, dagster, and frontend in parallel.")
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
@@ -116,14 +123,21 @@ def cmd_test_backend(args: argparse.Namespace) -> None:
     _run([_uv(), "run", "pytest", *extra])
 
 
-def cmd_test_frontend(args: argparse.Namespace) -> None:  # noqa: ARG001
-    if (FRONTEND / "package.json").exists():
-        _run([_pnpm(), "test", "--", "--run"], cwd=FRONTEND)
-    else:
+def cmd_test_frontend(args: argparse.Namespace) -> None:
+    if not (FRONTEND / "package.json").exists():
         print("(skipped: frontend not initialised)")
+        return
+    # Call vitest directly via node_modules/.bin to bypass pnpm's auto-install
+    # behaviour (which exits non-zero on ignored-build warnings).
+    binname = "vitest.cmd" if os.name == "nt" else "vitest"
+    vitest = FRONTEND / "node_modules" / ".bin" / binname
+    if not vitest.exists():
+        # Fall back to pnpm if deps weren't installed yet.
+        _run([_pnpm(), "install"], cwd=FRONTEND, check=False)
+    _run([str(vitest), "run"], cwd=FRONTEND)
 
 
-def cmd_lint(args: argparse.Namespace) -> None:  # noqa: ARG001
+def cmd_lint(args: argparse.Namespace) -> None:
     _run([_uv(), "run", "ruff", "check", "."])
     _run([_uv(), "run", "ruff", "format", "--check", "."])
     _run([_uv(), "run", "mypy", "src", "api", "orchestration"])
@@ -131,16 +145,16 @@ def cmd_lint(args: argparse.Namespace) -> None:  # noqa: ARG001
         _run([_pnpm(), "lint"], cwd=FRONTEND, check=False)
 
 
-def cmd_format(args: argparse.Namespace) -> None:  # noqa: ARG001
+def cmd_format(args: argparse.Namespace) -> None:
     _run([_uv(), "run", "ruff", "format", "."])
     _run([_uv(), "run", "ruff", "check", "--fix", "."])
 
 
-def cmd_db_up(args: argparse.Namespace) -> None:  # noqa: ARG001
+def cmd_db_up(args: argparse.Namespace) -> None:
     _run([*_docker_compose_cmd(), "up", "-d", "postgres", "pgadmin"])
 
 
-def cmd_db_down(args: argparse.Namespace) -> None:  # noqa: ARG001
+def cmd_db_down(args: argparse.Namespace) -> None:
     _run([*_docker_compose_cmd(), "down"])
 
 
@@ -160,7 +174,7 @@ def _ensure_env_file() -> None:
     if not sample.exists():
         return
     env.write_text(sample.read_text(encoding="utf-8"), encoding="utf-8")
-    print(f"Created .env from .env.example. EDIT IT before running `dev-all`.")
+    print("Created .env from .env.example. EDIT IT before running `dev-all`.")
 
 
 # ----------------------------------------------------------------------
@@ -170,21 +184,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Macro Trader task runner.")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("setup", help="Install deps, init DB, create .env").set_defaults(
-        func=cmd_setup
-    )
-    sub.add_parser("dev-backend", help="Run FastAPI dev server").set_defaults(
-        func=cmd_dev_backend
-    )
-    sub.add_parser("dev-dagster", help="Run Dagster dev").set_defaults(
-        func=cmd_dev_dagster
-    )
-    sub.add_parser("dev-frontend", help="Run Vite dev server").set_defaults(
-        func=cmd_dev_frontend
-    )
-    sub.add_parser("dev-all", help="FastAPI + Dagster + frontend").set_defaults(
-        func=cmd_dev_all
-    )
+    sub.add_parser("setup", help="Install deps, init DB, create .env").set_defaults(func=cmd_setup)
+    sub.add_parser("dev-backend", help="Run FastAPI dev server").set_defaults(func=cmd_dev_backend)
+    sub.add_parser("dev-dagster", help="Run Dagster dev").set_defaults(func=cmd_dev_dagster)
+    sub.add_parser("dev-frontend", help="Run Vite dev server").set_defaults(func=cmd_dev_frontend)
+    sub.add_parser("dev-all", help="FastAPI + Dagster + frontend").set_defaults(func=cmd_dev_all)
 
     test_p = sub.add_parser("test", help="Run all tests")
     test_p.add_argument("extra", nargs=argparse.REMAINDER)
@@ -194,9 +198,7 @@ def build_parser() -> argparse.ArgumentParser:
     test_be.add_argument("extra", nargs=argparse.REMAINDER)
     test_be.set_defaults(func=cmd_test_backend)
 
-    sub.add_parser("test-frontend", help="Run frontend vitest").set_defaults(
-        func=cmd_test_frontend
-    )
+    sub.add_parser("test-frontend", help="Run frontend vitest").set_defaults(func=cmd_test_frontend)
 
     sub.add_parser("lint", help="Ruff + mypy + eslint").set_defaults(func=cmd_lint)
     sub.add_parser("format", help="Ruff format + fix").set_defaults(func=cmd_format)

@@ -1,0 +1,52 @@
+name: frontend-ci
+
+on:
+  push:
+    branches: [clean_branch, main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-ci.yml"
+  pull_request:
+    branches: [clean_branch, main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-ci.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+
+      - name: Configure pnpm
+        run: pnpm config set ignore-scripts false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm exec tsc -b
+
+      - name: ESLint
+        run: pnpm exec eslint .
+        continue-on-error: true   # informational in Stage 1
+
+      - name: Vitest
+        run: pnpm exec vitest run
+
+      - name: Build
+        run: pnpm exec vite build

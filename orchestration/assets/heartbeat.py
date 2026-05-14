@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from dagster import AssetExecutionContext, MaterializeResult, MetadataValue, asset
+from dagster import MaterializeResult, MetadataValue, asset
 
 from macro_trader.db.engine import get_session
 from macro_trader.db.models.system import HeartbeatRow
@@ -19,7 +19,7 @@ from macro_trader.utils.dates import utcnow
     group_name="system",
     description="Pipeline liveness pulse. Writes one row to system.heartbeat per tick.",
 )
-def heartbeat_asset(context: AssetExecutionContext) -> MaterializeResult:
+def heartbeat_asset(context: Any) -> MaterializeResult:
     now = utcnow()
     meta: dict[str, Any] = {
         "run_id": context.run_id,

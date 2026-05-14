@@ -47,7 +47,7 @@ class PromotionCriteria:
             raise ValueError("min_shadow_period_days must be non-negative")
         if self.min_comparison_runs < 0:
             raise ValueError("min_comparison_runs must be non-negative")
-        if not -1.0 < self.improvement_threshold:
+        if not self.improvement_threshold > -1.0:
             raise ValueError("improvement_threshold must be > -1.0")
 
 
