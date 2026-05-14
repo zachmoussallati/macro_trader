@@ -11,6 +11,8 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.auth.routes import router as auth_router
+from api.routers.calendar import router as calendar_router
+from api.routers.data import router as data_router
 from api.routers.health import router as health_router
 from api.routers.methods import router as methods_router
 from macro_trader import __version__
@@ -75,6 +77,8 @@ def create_app() -> FastAPI:
     app.include_router(health_router, prefix=API_PREFIX)
     app.include_router(auth_router, prefix=API_PREFIX)
     app.include_router(methods_router, prefix=API_PREFIX)
+    app.include_router(data_router, prefix=API_PREFIX)
+    app.include_router(calendar_router, prefix=API_PREFIX)
 
     return app
 

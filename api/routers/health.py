@@ -8,6 +8,7 @@ Reports:
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 from fastapi import APIRouter
@@ -15,7 +16,12 @@ from sqlalchemy import func, select, text
 
 from api.deps import SessionDep
 from macro_trader import __version__
-from macro_trader.db.models.system import HeartbeatRow, MethodRegistryRow
+from macro_trader.db.models.system import (
+    DataFreshness,
+    DataQualityFlag,
+    HeartbeatRow,
+    MethodRegistryRow,
+)
 from macro_trader.methods.registry import get_default_registry
 from macro_trader.utils.dates import utcnow
 
@@ -74,6 +80,34 @@ def health(session: SessionDep) -> dict[str, Any]:
             "error": str(exc),
             "in_memory_registry_size": in_memory,
         }
+
+    # ----- Data freshness summary. -----
+    try:
+        freshness_rows = list(session.scalars(select(DataFreshness)))
+        total = len(freshness_rows)
+        stale = sum(1 for r in freshness_rows if r.is_stale)
+        status_obj["checks"]["data_freshness"] = {
+            "ok": stale == 0,
+            "total": total,
+            "stale": stale,
+        }
+    except Exception as exc:
+        status_obj["checks"]["data_freshness"] = {"ok": False, "error": str(exc)}
+
+    # ----- Data quality summary (flags in the last 24h). -----
+    try:
+        cutoff = utcnow() - timedelta(hours=24)
+        flags_24h = session.scalar(
+            select(func.count())
+            .select_from(DataQualityFlag)
+            .where(DataQualityFlag.run_at >= cutoff)
+        )
+        status_obj["checks"]["data_quality"] = {
+            "ok": True,
+            "flags_last_24h": int(flags_24h or 0),
+        }
+    except Exception as exc:
+        status_obj["checks"]["data_quality"] = {"ok": False, "error": str(exc)}
 
     status_obj["healthy"] = all(c.get("ok", False) for c in status_obj["checks"].values())
     return status_obj
