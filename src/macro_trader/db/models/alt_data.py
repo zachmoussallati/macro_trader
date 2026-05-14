@@ -5,8 +5,8 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ARRAY, Index, Numeric, String
-from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
+from sqlalchemy import Index, Numeric, String
+from sqlalchemy.dialects.postgresql import ARRAY, TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from macro_trader.db.base import Base

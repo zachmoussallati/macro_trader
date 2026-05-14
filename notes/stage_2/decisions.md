@@ -85,4 +85,92 @@ A running log of choices made while building the data layer. Each decision:
   var the test cares about. Future tests that depend on a value should
   monkeypatch it explicitly.
 
-<!-- Continued as Stage 2 work progresses. -->
+## 7. Every FRED vintage stored, not just latest
+
+- **What**: `FRED.get_series_all_releases` returns every revision; we
+  store each as its own row keyed by `(series_id, value_ts, observation_ts)`.
+  `realtime_start` / `realtime_end` mirror ALFRED.
+- **Why**: Stage 9 backtests must never see future data. A revision
+  published 2 months after the initial release is **not** what a trading
+  system would have seen on the original date.
+- **Consequence**: ~2-5x storage cost vs latest-only. Acceptable. Query
+  by `as_of` returns exactly the vintage in effect at that time.
+
+## 8. Holiday calendar: `pandas_market_calendars` (added but unused in S2)
+
+- **What**: deps include `pandas-market-calendars`. No code uses it yet.
+- **Why**: Stage 3+ will mask trading days for return computations.
+  Adding the dep now keeps Stage 2 self-contained.
+- **Consequence**: small dep bloat; will be exercised in Stage 3.
+
+## 9. Per-ingester rate-limit handling: `tenacity` retry decorator
+
+- **What**: each ingester wraps its raw HTTP call with `@retry(stop=
+  stop_after_attempt(3), wait=wait_exponential(multiplier=2, max=30))`.
+- **Why**: per-source failures shouldn't abort the run; retry is the
+  cheapest first defence. Per-row try/except in `fetch` keeps one bad
+  series from killing the rest of the batch.
+- **Alternatives considered**: a global token-bucket — overkill given we
+  call each API a handful of times per day.
+- **Consequence**: total backoff capped at ~93 seconds per source.
+
+## 10. ETF proxy ↔ instrument: one row per commodity in `instruments`
+
+- **What**: 13 rows in `market_data.instruments` keyed by our internal
+  symbol. `proxy_ticker` stores the ETF, `underlying_ref` stores the
+  eventual paid-data symbol.
+- **Why**: signals join on `instrument_id`. Hard-coding `"USO"` in
+  signal code would require N rewrites when we swap to NYMEX futures
+  in Stage 12.
+- **Consequence**: paid-data migration is a one-line update of
+  `proxy_ticker`.
+
+## 11. `usda_reports` PK is composite `(report_id, value_ts)`
+
+- **What**: TimescaleDB requires the partitioning column to appear in
+  the PK. Adding `value_ts` to `usda_reports`' PK alongside `report_id`
+  satisfies that without losing UUID-keyed identity.
+- **Why**: every other Stage 2 hypertable already has a natural composite
+  PK; USDA was the only one with a synthetic UUID PK.
+- **Consequence**: `ON CONFLICT` is unusable on this table; the ingester
+  uses delete-then-insert per `(report_type, value_ts, commodity, metric)`.
+
+## 12. ARRAY columns: use `sqlalchemy.dialects.postgresql.ARRAY`
+
+- **What**: switched `affected_instruments` and `affected_series` columns
+  from `sqlalchemy.ARRAY` to `sqlalchemy.dialects.postgresql.ARRAY`.
+- **Why**: `.overlap()` (Postgres `&&` operator) is only available on the
+  postgres-typed column. Calendar API needs it for instrument filtering.
+- **Consequence**: model code is Postgres-specific — fine, we're not
+  pretending to be portable.
+
+## 13. mypy: `macro_trader.data.ingestion.*` relaxed
+
+- **What**: per-module override drops strict typing for ingesters.
+- **Why**: external libs without stubs (`yfinance`, `fredapi`, `pytrends`)
+  would otherwise drown the checker. Strict on the rest of the codebase,
+  including `macro_trader.calendar.*` and `data.quality.*`.
+- **Consequence**: subtle bugs in ingester code aren't caught by mypy.
+  Mitigated by integration tests + lineage records that capture failures.
+
+## 14. Daily quality runner is idempotent on `(method, series, day)`
+
+- **What**: `run_daily_quality_check` deletes the day's flag rows for
+  each `(method_id, series_id)` pair before inserting fresh ones.
+- **Why**: reruns must not double-count. `ON CONFLICT` on a UUID PK is
+  unhelpful; delete-then-insert is clearer.
+- **Consequence**: a partial failure mid-run could leave some methods
+  with cleared rows and no replacements. Acceptable for Stage 2 — Stage 9
+  backtests don't rely on partial daily state.
+
+## 15. TimescaleDB auto-indexes filtered in alembic env.py
+
+- **What**: `_TIMESCALE_AUTO_INDEXES` lists `<table>_<time_col>_idx`
+  for each hypertable. `include_object` returns False for those during
+  autogenerate so `alembic check` doesn't constantly want to drop them.
+- **Why**: TimescaleDB creates a descending btree index on the partition
+  column automatically. Our model metadata doesn't (and shouldn't) know
+  about it.
+- **Consequence**: adding a new hypertable requires extending the set.
+  Documented in the env.py header.
+

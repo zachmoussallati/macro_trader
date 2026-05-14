@@ -7,7 +7,6 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
-    ARRAY,
     Boolean,
     ForeignKey,
     Index,
@@ -15,7 +14,7 @@ from sqlalchemy import (
     Numeric,
     String,
 )
-from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from macro_trader.db.base import Base

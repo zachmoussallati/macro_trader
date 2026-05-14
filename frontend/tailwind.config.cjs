@@ -1,7 +1,11 @@
-import type { Config } from "tailwindcss";
+const path = require("path");
 
-export default {
-  content: ["./index.html", "./src/**/*.{ts,tsx}"],
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: [
+    path.join(__dirname, "index.html"),
+    path.join(__dirname, "src/**/*.{ts,tsx}"),
+  ],
   darkMode: ["class"],
   theme: {
     extend: {
@@ -44,4 +48,4 @@ export default {
     },
   },
   plugins: [],
-} satisfies Config;
+};

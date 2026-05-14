@@ -82,10 +82,128 @@ export interface UserOut {
   created_at: string;
 }
 
+// ---------------- Stage 2: data + calendar shapes ----------------
+export interface DataSource {
+  source_id: string;
+  name: string;
+  base_url: string | null;
+  requires_auth: boolean;
+  is_healthy: boolean;
+  last_health_check: string | null;
+  rate_limit_notes: string | null;
+}
+
+export interface Freshness {
+  source_id: string;
+  series_or_table: string;
+  expected_frequency: string;
+  last_successful_at: string | null;
+  last_attempted_at: string | null;
+  is_stale: boolean;
+  consecutive_failures: number;
+}
+
+export interface Lineage {
+  lineage_id: string;
+  source_id: string;
+  fetched_at: string;
+  fetch_method: string | null;
+  rows_ingested: number | null;
+  rows_updated: number | null;
+  rows_rejected: number | null;
+  error_count: number;
+  dagster_run_id: string | null;
+  dagster_asset_key: string | null;
+}
+
+export interface SeriesRow {
+  series_id: string;
+  name: string;
+  source: string;
+  frequency: string;
+  units: string | null;
+  category: string | null;
+  affected_instruments: string[];
+  is_active: boolean;
+}
+
+export interface InstrumentRow {
+  instrument_id: string;
+  name: string;
+  asset_class: string;
+  sub_class: string | null;
+  proxy_ticker: string | null;
+  exchange: string | null;
+  is_active: boolean;
+  tracking_error_notes: string | null;
+}
+
+export interface BarRow {
+  instrument_id: string;
+  value_ts: string;
+  observation_ts: string;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number | null;
+  volume: number | null;
+  adjusted_close: number | null;
+}
+
+export interface QualityFlag {
+  flag_id: string;
+  method_id: string;
+  series_id: string;
+  value_ts: string;
+  value: number | null;
+  is_flagged: boolean;
+  run_at: string;
+}
+
+export interface CalendarEvent {
+  event_id: string;
+  event_ts: string;
+  actual_release_ts: string | null;
+  kind: string;
+  subject: string;
+  region: string | null;
+  importance: "low" | "medium" | "high";
+  affected_instruments: string[];
+  affected_series: string[];
+  source: string;
+  metadata: Record<string, unknown>;
+}
+
 export const apiMethods = {
+  // ----- core -----
   health: () => api.get<HealthResponse>("/health"),
   listMethods: () => api.get<MethodRow[]>("/methods"),
   login: (email: string, password: string) =>
     api.post<TokenPair>("/auth/login", { email, password }),
   me: () => api.get<UserOut>("/auth/me"),
+
+  // ----- data -----
+  listSources: () => api.get<DataSource[]>("/data/sources"),
+  listFreshness: () => api.get<Freshness[]>("/data/freshness"),
+  listLineage: (source?: string, limit = 50) =>
+    api.get<Lineage[]>(
+      `/data/lineage?${new URLSearchParams({ ...(source && { source }), limit: String(limit) })}`,
+    ),
+  listSeries: () => api.get<SeriesRow[]>("/data/series"),
+  listInstruments: () => api.get<InstrumentRow[]>("/data/instruments"),
+  listBars: (instrumentId: string, limit = 30) =>
+    api.get<BarRow[]>(`/data/instruments/${instrumentId}/bars?limit=${limit}`),
+  listQualityFlags: (lookbackDays = 7) =>
+    api.get<QualityFlag[]>(`/data/quality/flags?lookback_days=${lookbackDays}`),
+  qualitySummary: (lookbackHours = 24) =>
+    api.get<Record<string, number>>(`/data/quality/summary?lookback_hours=${lookbackHours}`),
+
+  // ----- calendar -----
+  listEvents: (params: { from?: string; to?: string; importance?: string[] } = {}) => {
+    const q = new URLSearchParams();
+    if (params.from) q.set("from", params.from);
+    if (params.to) q.set("to", params.to);
+    (params.importance ?? []).forEach((i) => q.append("importance", i));
+    return api.get<CalendarEvent[]>(`/calendar/events?${q.toString()}`);
+  },
 };

@@ -1,5 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import Calendar from "@/pages/Calendar";
+import Data from "@/pages/Data";
 import Home from "@/pages/Home";
 import Login from "@/pages/Login";
 import Methods from "@/pages/Methods";
@@ -27,6 +29,22 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <Methods />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/data"
+            element={
+              <ProtectedRoute>
+                <Data />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/calendar"
+            element={
+              <ProtectedRoute>
+                <Calendar />
               </ProtectedRoute>
             }
           />
