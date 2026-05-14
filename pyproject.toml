@@ -1,0 +1,167 @@
+[project]
+name = "macro-trader"
+version = "0.1.0"
+description = "Systematic macro trading system — Stage 1 foundation."
+authors = [
+    { name = "zachmoussallati", email = "zachariamoussallati@gmail.com" }
+]
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "Proprietary" }
+
+dependencies = [
+    # Core
+    "sqlalchemy>=2.0.36",
+    "psycopg[binary]>=3.2.3",
+    "alembic>=1.14.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.6.0",
+    "pyyaml>=6.0.2",
+    "python-dotenv>=1.0.1",
+    "structlog>=24.4.0",
+    "httpx>=0.28.0",
+    # API
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "bcrypt==4.0.1",
+    "python-multipart>=0.0.17",
+    # Orchestration
+    "dagster>=1.9.0",
+    "dagster-webserver>=1.9.0",
+    "dagster-postgres>=0.25.0",
+    # Data
+    "polars>=1.13.0",
+    "pandas>=2.2.3",
+    "pyarrow>=18.0.0",
+    "numpy>=2.0.0,<3.0.0",
+    # Stats baseline
+    "scipy>=1.14.0",
+    "statsmodels>=0.14.4",
+    "scikit-learn>=1.5.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.3",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "hypothesis>=6.119.0",
+    "ruff>=0.7.4",
+    "mypy>=1.13.0",
+    "pre-commit>=4.0.1",
+    "types-pyyaml>=6.0.12",
+    "types-passlib>=1.7.7",
+    "types-python-jose>=3.3.4",
+]
+
+[project.scripts]
+macro-trader = "macro_trader.__main__:main"
+
+[build-system]
+requires = ["uv_build>=0.11.13,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+package = true
+
+[tool.uv.build-backend]
+module-name = "macro_trader"
+module-root = "src"
+
+# ---------- Ruff ----------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "api", "orchestration", "tests", "scripts"]
+extend-exclude = ["macro", ".venv", "frontend", "alembic/versions"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # bugbear
+    "UP",  # pyupgrade
+    "C4",  # comprehensions
+    "SIM", # simplify
+    "RUF", # ruff-specific
+    "N",   # pep8-naming
+]
+ignore = [
+    "E501",   # line length — handled by formatter
+    "B008",   # function calls in defaults (FastAPI's Depends idiom)
+    "N818",   # exception suffix
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101", "N802", "N803", "N806"]
+"alembic/**/*.py" = ["E402", "N999"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+# ---------- Mypy ----------
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+no_implicit_optional = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+ignore_missing_imports = true
+exclude = ["macro", ".venv", "alembic/versions", "frontend"]
+
+[[tool.mypy.overrides]]
+module = ["tests.*", "scripts.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+# ---------- Pytest ----------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--strict-config",
+    "--tb=short",
+    "--cov=src/macro_trader",
+    "--cov=api",
+    "--cov-report=term-missing:skip-covered",
+    "--cov-report=xml",
+]
+markers = [
+    "unit: unit tests (fast, no external deps)",
+    "integration: integration tests (require Postgres)",
+    "e2e: end-to-end tests (full stack)",
+    "slow: slow tests",
+]
+asyncio_mode = "auto"
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["src/macro_trader", "api"]
+omit = ["*/__init__.py", "*/__main__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "\\.\\.\\.",
+]

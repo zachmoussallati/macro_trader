@@ -1,0 +1,15 @@
+# Production overrides. JSON logs; no autoreload; pool sized higher.
+
+env: prod
+
+api:
+  reload: false
+
+logging:
+  level: INFO
+  format: json
+
+database:
+  pool_size: 20
+  max_overflow: 40
+  echo_sql: false

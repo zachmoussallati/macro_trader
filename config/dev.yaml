@@ -1,0 +1,13 @@
+# Development overrides. Verbose logs; SQL echo off by default.
+
+env: dev
+
+api:
+  reload: true
+
+logging:
+  level: DEBUG
+  format: console
+
+database:
+  echo_sql: false

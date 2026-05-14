@@ -1,0 +1,79 @@
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+.eggs/
+build/
+dist/
+.installed.cfg
+MANIFEST
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.nox/
+.hypothesis/
+
+# ---------- uv / venvs ----------
+.venv/
+venv/
+env/
+ENV/
+macro/
+
+# ---------- IDE ----------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ---------- Env / secrets ----------
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets/
+
+# ---------- Logs / data ----------
+*.log
+logs/
+data/raw/
+data/processed/
+*.db
+*.sqlite
+*.sqlite3
+
+# ---------- Dagster ----------
+dagster_home/
+$DAGSTER_HOME/
+*.dagster
+
+# ---------- Node / frontend ----------
+node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+*.tsbuildinfo
+
+# ---------- OS ----------
+Thumbs.db
+desktop.ini
+ehthumbs.db
+$RECYCLE.BIN/
+
+# ---------- Misc ----------
+*.bak
+*.tmp
+*.cache
+.claude/.cache/

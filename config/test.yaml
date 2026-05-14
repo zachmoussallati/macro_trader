@@ -1,0 +1,23 @@
+# Test overrides. Uses a separate test database.
+
+env: test
+
+api:
+  reload: false
+
+logging:
+  level: WARNING
+  format: console
+
+database:
+  name: macro_trader_test
+  echo_sql: false
+
+auth:
+  access_token_expire_minutes: 5
+
+methods:
+  default_promotion:
+    min_shadow_period_days: 0
+    min_comparison_runs: 1
+    improvement_threshold: 0.0
