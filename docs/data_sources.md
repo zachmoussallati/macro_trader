@@ -94,6 +94,11 @@ see `src/macro_trader/data/seed/sources_seed.py`.
 - **Stage 2 scope**: US-aggregate HDD / CDD via the GSOM (Global Summary
   of the Month) dataset. Drought Monitor is on the calendar but not yet
   ingested.
+- **Stage 3 expansion**: regional FIPS aggregates added for the US corn
+  belt (Iowa `FIPS:19`, Illinois `FIPS:17`) and Kansas winter wheat
+  (`FIPS:20`). South American coverage (Brazilian Mato Grosso for soy,
+  Pampas region in Argentina) requires non-NOAA providers and is deferred
+  to Stage 4 ag signals.
 - **Quirks**:
   - GSOM lags by ~5 days vs end of month; expect freshness to look one
     cycle behind.

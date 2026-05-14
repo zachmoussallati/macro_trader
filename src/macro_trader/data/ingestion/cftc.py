@@ -1,15 +1,19 @@
 """CFTC Commitments of Traders ingester.
 
-Downloads the weekly disaggregated futures-only report and parses it into
-``positioning.cot_weekly`` rows. The disaggregated report covers all the
-commodities in our universe; legacy/TFF can be wired similarly later.
+Stage 3 covers three report types:
 
-The disaggregated text file URL (refresh weekly): the historical CSV is
-at https://www.cftc.gov/files/dea/history/com_disagg_txt_*.zip; for current
-year we hit the JSON ``deacotreports`` endpoint via the configured base.
+- ``disaggregated`` (commodity-focused; was the only Stage 2 wiring)
+- ``legacy`` (older commercial vs non-commercial split — needed for
+  Stage 4 positioning signals)
+- ``financial_tff`` (Traders in Financial Futures; included for completeness
+  on FX/rates instruments arriving in later stages)
 
-Stage 2 scope: only the current-year disaggregated report. Historical
-backfill is a separate operation documented in usage.md.
+The downloads are weekly ZIPs hosted on cftc.gov, partitioned by year. The
+Stage 2 implementation pulled only the current year, which silently
+returned zero rows during the Jan 1-7 window before the new file gets
+populated. Stage 3 fix: between Jan 1 and Jan 14, fetch BOTH the prior
+year and current year ZIPs and merge; dedupe by natural key inside
+``transform``.
 """
 
 from __future__ import annotations
@@ -28,27 +32,93 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from macro_trader.data.ingestion.base import Ingester
 from macro_trader.data.lineage import IngestStats, LineageRecord
 from macro_trader.db.models.positioning import COTWeekly
-from macro_trader.utils.dates import ensure_aware
+from macro_trader.utils.dates import ensure_aware, utcnow
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
 
 # CFTC contract code → our instrument_id. Codes are the first 6 digits of
-# the CFTC commodity classification number.
+# the CFTC commodity classification number. Verify quarterly: Brent and
+# refined-product codes have rotated in past CFTC releases.
 CFTC_CODE_TO_INSTRUMENT: dict[str, str] = {
-    "067651": "CL",  # WTI Crude Oil
-    "067411": "BZ",  # Brent Crude (latest)  — code varies; verify quarterly
-    "023391": "NG",  # Henry Hub Natural Gas
-    "022651": "HO",  # Heating Oil
-    "111659": "RB",  # RBOB Gasoline
-    "085692": "HG",  # Copper
-    "088691": "GC",  # Gold
-    "084691": "SI",  # Silver
-    "076651": "PL",  # Platinum
-    "002602": "ZC",  # Corn
-    "005602": "ZS",  # Soybeans
-    "001602": "ZW",  # Wheat (CBOT)
+    "067651": "CL",
+    "067411": "BZ",
+    "023391": "NG",
+    "022651": "HO",
+    "111659": "RB",
+    "085692": "HG",
+    "088691": "GC",
+    "084691": "SI",
+    "076651": "PL",
+    "002602": "ZC",
+    "005602": "ZS",
+    "001602": "ZW",
+}
+
+
+# (report_type, base_url_template). ``{year}`` is the calendar year.
+_REPORTS: tuple[tuple[str, str], ...] = (
+    (
+        "disaggregated",
+        "https://www.cftc.gov/files/dea/history/com_disagg_txt_{year}.zip",
+    ),
+    (
+        "legacy",
+        "https://www.cftc.gov/files/dea/history/deacot{year}.zip",
+    ),
+    (
+        "financial_tff",
+        "https://www.cftc.gov/files/dea/history/fut_fin_txt_{year}.zip",
+    ),
+)
+
+
+# Per-report column-name maps. The disaggregated report carries every field
+# we model; legacy and TFF fill a subset and leave the rest NULL.
+_DISAGG_COLS = {
+    "open_interest": "Open_Interest_All",
+    "producer_long": "Prod_Merc_Positions_Long_All",
+    "producer_short": "Prod_Merc_Positions_Short_All",
+    "swap_long": "Swap_Positions_Long_All",
+    "swap_short": "Swap__Positions_Short_All",
+    "managed_money_long": "M_Money_Positions_Long_All",
+    "managed_money_short": "M_Money_Positions_Short_All",
+    "other_reportable_long": "Other_Rept_Positions_Long_All",
+    "other_reportable_short": "Other_Rept_Positions_Short_All",
+    "nonreportable_long": "NonRept_Positions_Long_All",
+    "nonreportable_short": "NonRept_Positions_Short_All",
+}
+
+# Legacy COT (commercial vs non-commercial breakdown).
+# Producer-like rows go in producer_*; managed money / large speculators in
+# nonreportable_* per the legacy taxonomy.
+_LEGACY_COLS = {
+    "open_interest": "Open_Interest_All",
+    "producer_long": "Comm_Positions_Long_All",
+    "producer_short": "Comm_Positions_Short_All",
+    "managed_money_long": "NonComm_Positions_Long_All",
+    "managed_money_short": "NonComm_Positions_Short_All",
+    "nonreportable_long": "NonRept_Positions_Long_All",
+    "nonreportable_short": "NonRept_Positions_Short_All",
+}
+
+# TFF (Traders in Financial Futures). Largely empty on commodity codes but
+# the schema accepts it.
+_TFF_COLS = {
+    "open_interest": "Open_Interest_All",
+    "managed_money_long": "Asset_Mgr_Positions_Long_All",
+    "managed_money_short": "Asset_Mgr_Positions_Short_All",
+    "swap_long": "Lev_Money_Positions_Long_All",
+    "swap_short": "Lev_Money_Positions_Short_All",
+    "nonreportable_long": "NonRept_Positions_Long_All",
+    "nonreportable_short": "NonRept_Positions_Short_All",
+}
+
+_REPORT_COL_MAP: dict[str, dict[str, str]] = {
+    "disaggregated": _DISAGG_COLS,
+    "legacy": _LEGACY_COLS,
+    "financial_tff": _TFF_COLS,
 }
 
 
@@ -63,17 +133,44 @@ class CFTCIngester(Ingester[CFTCRaw]):
     expected_frequency = "weekly"
     fetch_method = "csv_download"
 
-    DISAGG_HISTORICAL_URL = "https://www.cftc.gov/files/dea/history/com_disagg_txt_{year}.zip"
+    # Within this many days of the new year, also pull the prior year's ZIP
+    # so we don't silently return zero rows before CFTC publishes the new
+    # year's file.
+    YEAR_BOUNDARY_BACKFILL_DAYS = 14
 
     def __init__(self, *, session_factory, settings) -> None:
         super().__init__(session_factory=session_factory, settings=settings)
 
+    # ------------------------------------------------------------------
+    # Fetch
+    # ------------------------------------------------------------------
     def fetch(self, *, since: datetime | None = None) -> CFTCRaw:
-        year = (since or datetime.utcnow()).year
-        url = self.DISAGG_HISTORICAL_URL.format(year=year)
-        content = self._download(url)
-        rows = self._parse_zip(content)
-        return CFTCRaw(rows=rows)
+        now = since or utcnow()
+        years = self._years_to_fetch(now)
+        raw = CFTCRaw()
+        for year in years:
+            for report_type, template in _REPORTS:
+                url = template.format(year=year)
+                try:
+                    content = self._download(url)
+                except Exception as exc:
+                    self.log.warning(
+                        "ingest.cftc.download_failed",
+                        report_type=report_type,
+                        year=year,
+                        error=str(exc),
+                    )
+                    continue
+                for parsed in self._parse_zip(content, report_type=report_type):
+                    raw.rows.append(parsed)
+        return raw
+
+    def _years_to_fetch(self, now: datetime) -> list[int]:
+        years = [now.year]
+        day_of_year = now.timetuple().tm_yday
+        if day_of_year <= self.YEAR_BOUNDARY_BACKFILL_DAYS:
+            years.append(now.year - 1)
+        return years
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, max=30), reraise=True)
     def _download(self, url: str) -> bytes:
@@ -82,12 +179,12 @@ class CFTCIngester(Ingester[CFTCRaw]):
             response.raise_for_status()
             return response.content
 
-    def _parse_zip(self, content: bytes) -> list[dict[str, Any]]:
-        rows: list[dict[str, Any]] = []
+    def _parse_zip(self, content: bytes, *, report_type: str) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
         with zipfile.ZipFile(io.BytesIO(content)) as zf:
             inner_names = [n for n in zf.namelist() if n.endswith(".txt")]
             if not inner_names:
-                return rows
+                return out
             with zf.open(inner_names[0]) as fh:
                 text = io.TextIOWrapper(fh, encoding="latin-1")
                 reader = csv.DictReader(text)
@@ -96,14 +193,28 @@ class CFTCIngester(Ingester[CFTCRaw]):
                     instrument_id = CFTC_CODE_TO_INSTRUMENT.get(cftc_code)
                     if instrument_id is None:
                         continue
-                    rows.append({"_raw": row, "instrument_id": instrument_id})
-        return rows
+                    out.append(
+                        {
+                            "_raw": row,
+                            "instrument_id": instrument_id,
+                            "report_type": report_type,
+                        }
+                    )
+        return out
 
+    # ------------------------------------------------------------------
+    # Transform
+    # ------------------------------------------------------------------
     def transform(self, raw: CFTCRaw) -> list[dict[str, Any]]:
+        # Dedupe within the batch on natural key (report_ts, instrument_id,
+        # report_type). The Jan year-boundary fix can produce overlap if the
+        # provider has already pushed early-year rows into both files.
+        seen: set[tuple[datetime, str, str]] = set()
         out: list[dict[str, Any]] = []
         for entry in raw.rows:
             r = entry["_raw"]
             instrument_id = entry["instrument_id"]
+            report_type = entry["report_type"]
             try:
                 report_dt = datetime.strptime(
                     (r.get("Report_Date_as_YYYY-MM-DD") or "").strip(),
@@ -111,29 +222,29 @@ class CFTCIngester(Ingester[CFTCRaw]):
                 )
             except (ValueError, KeyError):
                 continue
-            out.append(
-                {
-                    "report_ts": ensure_aware(report_dt),
-                    "instrument_id": instrument_id,
-                    "report_type": "disaggregated",
-                    "publication_ts": ensure_aware(report_dt),
-                    "cftc_contract_code": (r.get("CFTC_Contract_Market_Code") or "").strip(),
-                    "open_interest": _opt_float(r.get("Open_Interest_All")),
-                    "producer_long": _opt_float(r.get("Prod_Merc_Positions_Long_All")),
-                    "producer_short": _opt_float(r.get("Prod_Merc_Positions_Short_All")),
-                    "swap_long": _opt_float(r.get("Swap_Positions_Long_All")),
-                    "swap_short": _opt_float(r.get("Swap__Positions_Short_All")),
-                    "managed_money_long": _opt_float(r.get("M_Money_Positions_Long_All")),
-                    "managed_money_short": _opt_float(r.get("M_Money_Positions_Short_All")),
-                    "other_reportable_long": _opt_float(r.get("Other_Rept_Positions_Long_All")),
-                    "other_reportable_short": _opt_float(r.get("Other_Rept_Positions_Short_All")),
-                    "nonreportable_long": _opt_float(r.get("NonRept_Positions_Long_All")),
-                    "nonreportable_short": _opt_float(r.get("NonRept_Positions_Short_All")),
-                    "source": "cftc",
-                }
-            )
+            report_ts = ensure_aware(report_dt)
+            dedup_key = (report_ts, instrument_id, report_type)
+            if dedup_key in seen:
+                continue
+            seen.add(dedup_key)
+
+            col_map = _REPORT_COL_MAP[report_type]
+            row_out: dict[str, Any] = {
+                "report_ts": report_ts,
+                "instrument_id": instrument_id,
+                "report_type": report_type,
+                "publication_ts": report_ts,
+                "cftc_contract_code": (r.get("CFTC_Contract_Market_Code") or "").strip(),
+                "source": "cftc",
+            }
+            for canonical, source_col in col_map.items():
+                row_out[canonical] = _opt_float(r.get(source_col))
+            out.append(row_out)
         return out
 
+    # ------------------------------------------------------------------
+    # Persist
+    # ------------------------------------------------------------------
     def persist(
         self,
         session: Session,

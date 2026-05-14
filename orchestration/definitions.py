@@ -34,6 +34,9 @@ from orchestration.assets import (
     ingest_usda,
     ingest_yfinance_bars,
     refresh_calendar_events,
+    signal_carry,
+    signal_trend,
+    signal_value,
 )
 
 log = get_logger(__name__)
@@ -113,6 +116,12 @@ data_quality_job = define_asset_job(
     description="Daily quality run + comparator persistence.",
 )
 
+compute_all_signals_job = define_asset_job(
+    name="compute_all_signals_job",
+    selection=AssetSelection.assets(signal_trend, signal_carry, signal_value),
+    description="Daily computation of trend + carry + value signals.",
+)
+
 
 # ----------------------------------------------------------------------
 # Schedules (all UTC)
@@ -161,6 +170,13 @@ SCHEDULES = [
         job=data_quality_job,
         execution_timezone="UTC",
     ),
+    ScheduleDefinition(
+        name="compute_all_signals_daily_2330_utc",
+        cron_schedule="30 23 * * *",
+        job=compute_all_signals_job,
+        execution_timezone="UTC",
+        description="Daily trend + carry + value signal computation.",
+    ),
 ]
 
 
@@ -182,6 +198,7 @@ defs = Definitions(
         ingest_calendar_job,
         ingest_all_job,
         data_quality_job,
+        compute_all_signals_job,
     ],
     schedules=SCHEDULES,
     resources=_resources(),

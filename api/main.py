@@ -15,6 +15,7 @@ from api.routers.calendar import router as calendar_router
 from api.routers.data import router as data_router
 from api.routers.health import router as health_router
 from api.routers.methods import router as methods_router
+from api.routers.signals import router as signals_router
 from macro_trader import __version__
 from macro_trader.config import get_settings
 from macro_trader.logging_setup import configure_logging, get_logger
@@ -79,6 +80,7 @@ def create_app() -> FastAPI:
     app.include_router(methods_router, prefix=API_PREFIX)
     app.include_router(data_router, prefix=API_PREFIX)
     app.include_router(calendar_router, prefix=API_PREFIX)
+    app.include_router(signals_router, prefix=API_PREFIX)
 
     return app
 

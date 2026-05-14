@@ -53,6 +53,7 @@ _TIMESCALE_AUTO_INDEXES = frozenset(
         "usda_reports_value_ts_idx",
         "weather_data_value_ts_idx",
         "google_trends_value_ts_idx",
+        "signal_values_value_ts_idx",
     }
 )
 

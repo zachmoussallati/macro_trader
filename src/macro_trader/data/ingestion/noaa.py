@@ -27,10 +27,19 @@ if TYPE_CHECKING:
 
 
 # (cdo_station_id, our_station_id, region, affected_instruments)
+# FIPS aggregates are population-weighted at the area level — sufficient
+# for HDD/CDD demand signals on natural gas + electricity (NG, HO) and
+# growing-season weather signals on grains (ZC, ZS, ZW). Brazilian Mato
+# Grosso (soy) and Pampas (Argentina) coverage requires non-NOAA sources;
+# documented as deferred in docs/data_sources.md.
 STATIONS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
-    # GSOM "FIPS:US" is a country-level aggregate; ideal for HDD/CDD demand
-    # signals on natural gas + electricity (and indirectly heating oil).
     ("FIPS:US", "US_AGG", "US", ("NG", "HO")),
+    # Corn Belt centre — drives corn + soy yield expectations.
+    ("FIPS:19", "IA_CORN_BELT", "US-IA", ("ZC", "ZS")),
+    # Illinois — second-largest corn / soy producer.
+    ("FIPS:17", "IL_CORN_BELT", "US-IL", ("ZC", "ZS")),
+    # Kansas — winter wheat heartland.
+    ("FIPS:20", "KS_WHEAT_BELT", "US-KS", ("ZW",)),
 )
 
 

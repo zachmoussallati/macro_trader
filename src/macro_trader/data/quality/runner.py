@@ -42,10 +42,16 @@ log = get_logger(__name__)
 def _load_close_series(
     session: Session, instrument_id: str, lookback_days: int = 365
 ) -> tuple[list[datetime], np.ndarray]:
-    """Return (value_ts list, close array) for the latest vintage per value_ts."""
+    """Return (value_ts list, close array) for the latest vintage per value_ts.
+
+    Note: this stays a direct query rather than going through
+    :mod:`macro_trader.data.loaders` because the loaders module is
+    calendar-aware and forward-fills, whereas the data-quality flag
+    pipeline wants the raw observed sequence so flags align with actual
+    observation dates (including non-trading days when the upstream
+    source emits them).
+    """
     cutoff = utcnow() - timedelta(days=lookback_days)
-    # For each value_ts, take the latest observation_ts (the most-recent
-    # revision we hold).
     stmt = (
         select(DailyBar.value_ts, DailyBar.close, DailyBar.observation_ts)
         .where(DailyBar.instrument_id == instrument_id)
@@ -53,7 +59,6 @@ def _load_close_series(
         .order_by(DailyBar.value_ts, DailyBar.observation_ts.desc())
     )
     rows = list(session.execute(stmt).all())
-    # Dedupe by value_ts keeping the first (latest observation_ts).
     by_ts: dict[datetime, float] = {}
     for value_ts, close, _obs in rows:
         if value_ts in by_ts:

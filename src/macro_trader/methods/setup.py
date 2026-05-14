@@ -38,6 +38,16 @@ def register_all_methods(session: Session) -> None:
         # data quality module not yet present (running pre-Stage-2 code).
         log.info("methods.setup.skipped", component="data_quality", reason="module not present")
 
-    # ----- Stage 3+ — add registrations here. -----
+    # ----- Stage 3: signal library part 1 -----
+    for component, importer in (
+        ("trend_signal", "macro_trader.signals.trend.register"),
+        ("carry_signal", "macro_trader.signals.carry.register"),
+        ("value_signal", "macro_trader.signals.value.register"),
+    ):
+        try:
+            module = __import__(importer, fromlist=["register"])
+            module.register(session)
+        except ImportError:
+            log.info("methods.setup.skipped", component=component, reason="module not present")
 
     log.info("methods.setup.complete")

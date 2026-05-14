@@ -13,12 +13,19 @@ from orchestration.assets.ingest import (
     ingest_usda,
     ingest_yfinance_bars,
 )
+from orchestration.assets.signals import (
+    SIGNAL_ASSETS,
+    signal_carry,
+    signal_trend,
+    signal_value,
+)
 
 ALL_ASSETS = [
     heartbeat_asset,
     *INGEST_ASSETS,
     *CALENDAR_ASSETS,
     *DATA_QUALITY_ASSETS,
+    *SIGNAL_ASSETS,
 ]
 
 __all__ = [
@@ -26,6 +33,7 @@ __all__ = [
     "CALENDAR_ASSETS",
     "DATA_QUALITY_ASSETS",
     "INGEST_ASSETS",
+    "SIGNAL_ASSETS",
     "daily_data_quality",
     "heartbeat_asset",
     "ingest_cftc_cot",
@@ -36,4 +44,7 @@ __all__ = [
     "ingest_usda",
     "ingest_yfinance_bars",
     "refresh_calendar_events",
+    "signal_carry",
+    "signal_trend",
+    "signal_value",
 ]

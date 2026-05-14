@@ -14,6 +14,7 @@ from macro_trader.db.models.auth import RefreshTokenRow, User, UserRole
 from macro_trader.db.models.macro_data import CalendarEvent, Series, SeriesObservation
 from macro_trader.db.models.market_data import DailyBar, Instrument
 from macro_trader.db.models.positioning import COTWeekly
+from macro_trader.db.models.signals import SignalValue
 from macro_trader.db.models.system import (
     DataFreshness,
     DataLineage,
@@ -43,6 +44,7 @@ __all__ = [
     "RefreshTokenRow",
     "Series",
     "SeriesObservation",
+    "SignalValue",
     "USDAReport",
     "User",
     "UserRole",
