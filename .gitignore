@@ -79,5 +79,14 @@ $RECYCLE.BIN/
 .claude/
 sync.log
 .vite/
-stage_*_prompt.md
+
+# ---------- Prompts (stage briefs, scratchpads — not part of deliverable) ----------
+prompts/
 .prompts/
+prompt.md
+prompts.md
+PROMPT.md
+PROMPTS.md
+stage_*_prompt.md
+*_prompt.md
+*.prompt.md
