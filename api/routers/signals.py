@@ -15,6 +15,7 @@ from macro_trader.db.models.system import (
     MethodComparisonRow,
     MethodRegistryRow,
 )
+from macro_trader.signals.designated import resolve_id
 from macro_trader.utils.dates import utcnow
 
 router = APIRouter(prefix="/signals", tags=["signals"])
@@ -94,13 +95,30 @@ class HeatmapCellOut(BaseModel):
     value_ts: datetime
 
 
-# Components designated as the "production" signal per family. The
-# heatmap shows these; Stage 4+ extends this list as families come online.
-DESIGNATED_PER_COMPONENT: dict[str, str] = {
-    "trend_signal": "trend.ensemble.v1",
-    "carry_signal": "carry.spot_proxy.v1",
-    "value_signal": "value.zscore.v1",
-}
+# Components whose latest values populate the dashboard heatmap. The
+# *id* of the designated method per component is resolved at request
+# time via :func:`macro_trader.signals.designated.resolve_id`
+# (config override -> registry PRODUCTION -> BASELINE -> first-registered).
+# Adding a component here makes the heatmap query it; the resolver
+# handles the "which method's values?" question.
+COMPONENTS_FOR_HEATMAP: tuple[str, ...] = (
+    "trend_signal",
+    "carry_signal",
+    "value_signal",
+    "positioning_signal",
+    "dislocation_signal",
+)
+
+
+def _designated_signal_ids() -> dict[str, str]:
+    """Resolve the designated method id per component, skipping any
+    component that isn't yet registered."""
+    out: dict[str, str] = {}
+    for component in COMPONENTS_FOR_HEATMAP:
+        sid = resolve_id(component)
+        if sid is not None:
+            out[component] = sid
+    return out
 
 
 # ----------------------------------------------------------------------
@@ -126,7 +144,7 @@ def list_signals(session: SessionDep) -> list[SignalMetaOut]:
     rows = list(
         session.scalars(
             select(MethodRegistryRow)
-            .where(MethodRegistryRow.component.in_(list(DESIGNATED_PER_COMPONENT.keys())))
+            .where(MethodRegistryRow.component.in_(list(COMPONENTS_FOR_HEATMAP)))
             .order_by(MethodRegistryRow.component, MethodRegistryRow.method_id)
         )
     )
@@ -141,7 +159,7 @@ def heatmap(
     """Latest cell per (component, instrument). Designated method per family."""
     target = as_of if as_of is not None else utcnow()
     out: list[HeatmapCellOut] = []
-    for component, signal_id in DESIGNATED_PER_COMPONENT.items():
+    for component, signal_id in _designated_signal_ids().items():
         # For each instrument, take the most recent value_ts where
         # observation_ts <= as_of.
         subq = (

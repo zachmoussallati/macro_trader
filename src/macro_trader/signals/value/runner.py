@@ -11,6 +11,7 @@ from sqlalchemy import select
 from macro_trader.db.models.market_data import Instrument
 from macro_trader.db.models.system import HeartbeatRow
 from macro_trader.logging_setup import get_logger
+from macro_trader.methods.comparator import run_comparisons_for_component
 from macro_trader.signals.base import SignalInput, SignalMethod
 from macro_trader.signals.output import persist_signal_outputs
 from macro_trader.signals.value.comparator import ValueSignalComparator
@@ -54,7 +55,6 @@ def run_daily_value(
     )
     methods = list(methods) if methods is not None else default_value_methods()
     written: dict[str, int] = {}
-    method_map = {m.metadata.method_id: m for m in methods}
     for method in methods:
         outputs = method.compute(sig_input, session)
         written[method.metadata.method_id] = persist_signal_outputs(
@@ -64,26 +64,22 @@ def run_daily_value(
             lineage_id=None,
         )
 
-    baseline = method_map.get("value.zscore.v1")
-    shadow = method_map.get("value.cross_sectional.v1")
-    if baseline is not None and shadow is not None:
-        comparator = ValueSignalComparator()
-        sig_with_session = SignalInput(
-            instrument_ids=sig_input.instrument_ids,
-            as_of=sig_input.as_of,
-            start=sig_input.start,
-            end=sig_input.end,
-            extras={"session": session},
-        )
-        comparator.compare(
-            baseline,
-            shadow,
-            sig_with_session,
-            period_start=sig_input.start,
-            period_end=sig_input.end,
-            notes="daily value signal comparison",
-            session=session,
-        )
+    sig_with_session = SignalInput(
+        instrument_ids=sig_input.instrument_ids,
+        as_of=sig_input.as_of,
+        start=sig_input.start,
+        end=sig_input.end,
+        extras={"session": session},
+    )
+    run_comparisons_for_component(
+        "value_signal",
+        ValueSignalComparator(),
+        sig_with_session,
+        period_start=sig_input.start,
+        period_end=sig_input.end,
+        notes="daily value signal comparison",
+        session=session,
+    )
 
     session.add(
         HeartbeatRow(

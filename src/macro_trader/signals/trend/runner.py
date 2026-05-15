@@ -12,6 +12,7 @@ from sqlalchemy import select
 from macro_trader.db.models.market_data import Instrument
 from macro_trader.db.models.system import HeartbeatRow
 from macro_trader.logging_setup import get_logger
+from macro_trader.methods.comparator import run_comparisons_for_component
 from macro_trader.signals.base import SignalInput, SignalMethod
 from macro_trader.signals.output import persist_signal_outputs
 from macro_trader.signals.trend.comparator import TrendSignalComparator
@@ -83,29 +84,25 @@ def run_daily_trend(
         )
         written[method.metadata.method_id] = rows
 
-    # Comparator: baselines vs shadow (HP filter).
-    baseline = next((m for m in methods if m.metadata.method_id == "trend.ensemble.v1"), None)
-    shadow = next((m for m in methods if m.metadata.method_id == "trend.hp_filter.v1"), None)
-    if baseline is not None and shadow is not None:
-        comparator = TrendSignalComparator()
-        # Hand each method's existing outputs back through the comparator
-        # via in-memory shortcut; we avoid recomputing data.
-        sig_with_session = SignalInput(
-            instrument_ids=sig_input.instrument_ids,
-            as_of=sig_input.as_of,
-            start=sig_input.start,
-            end=sig_input.end,
-            extras={"session": session},
-        )
-        comparator.compare(
-            baseline,
-            shadow,
-            sig_with_session,
-            period_start=sig_input.start,
-            period_end=sig_input.end,
-            notes="daily trend signal comparison",
-            session=session,
-        )
+    # Comparator: every SHADOW vs the registry's reference method.
+    # In Stage 3 that's just (trend.ensemble.v1 BASELINE, trend.hp_filter.v1
+    # SHADOW); the loop scales when Stage 4+ adds more shadows.
+    sig_with_session = SignalInput(
+        instrument_ids=sig_input.instrument_ids,
+        as_of=sig_input.as_of,
+        start=sig_input.start,
+        end=sig_input.end,
+        extras={"session": session},
+    )
+    run_comparisons_for_component(
+        "trend_signal",
+        TrendSignalComparator(),
+        sig_with_session,
+        period_start=sig_input.start,
+        period_end=sig_input.end,
+        notes="daily trend signal comparison",
+        session=session,
+    )
 
     session.add(
         HeartbeatRow(

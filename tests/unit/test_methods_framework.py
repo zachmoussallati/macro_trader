@@ -304,3 +304,126 @@ def test_promotion_criteria_defaults() -> None:
     assert c.min_comparison_runs == 12
     assert c.improvement_threshold == 0.05
     assert c.required_improvements == []
+
+
+# ----------------------------------------------------------------------
+# Reference-method resolution + multi-shadow comparator runner (Stage 4A)
+# ----------------------------------------------------------------------
+@pytest.mark.unit
+def test_reference_for_prefers_production_over_baseline() -> None:
+    reg = MethodRegistry()
+    reg.register(IdentityMethod(), MethodStatus.BASELINE)
+    prod = NoisyIdentityMethod(method_id="trivial.prod.v1")
+    prod.metadata = MethodMetadata("trivial.prod.v1", "trivial_component", "P", "1", "")
+    reg.register(prod, MethodStatus.PRODUCTION)
+    ref = reg.reference_for("trivial_component")
+    assert ref is not None
+    assert ref.metadata.method_id == "trivial.prod.v1"
+
+
+@pytest.mark.unit
+def test_reference_for_falls_back_to_baseline() -> None:
+    reg = MethodRegistry()
+    reg.register(IdentityMethod(), MethodStatus.BASELINE)
+    ref = reg.reference_for("trivial_component")
+    assert ref is not None
+    assert ref.metadata.method_id == "trivial.identity.v1"
+
+
+@pytest.mark.unit
+def test_reference_for_falls_back_to_first_registered_when_no_baseline() -> None:
+    reg = MethodRegistry()
+    # Only a SHADOW exists. reference_for must still return something so the
+    # comparator runner can no-op cleanly.
+    reg.register(NoisyIdentityMethod(), MethodStatus.SHADOW)
+    ref = reg.reference_for("trivial_component")
+    assert ref is not None
+    assert ref.metadata.method_id == "trivial.noisy.v1"
+
+
+@pytest.mark.unit
+def test_reference_for_skips_deprecated() -> None:
+    reg = MethodRegistry()
+    reg.register(IdentityMethod(), MethodStatus.DEVELOPMENT)
+    reg.set_status("trivial.identity.v1", MethodStatus.DEPRECATED, reason="retired")
+    assert reg.reference_for("trivial_component") is None
+
+
+@pytest.mark.unit
+def test_reference_for_returns_none_when_component_unknown() -> None:
+    reg = MethodRegistry()
+    assert reg.reference_for("never_seen") is None
+
+
+@pytest.mark.unit
+def test_run_comparisons_for_component_handles_multiple_shadows() -> None:
+    """The new generic runner must compare every SHADOW against the
+    resolved reference, returning one ComparisonResult per shadow."""
+    from macro_trader.methods.comparator import run_comparisons_for_component
+    from macro_trader.methods.registry import register_method
+
+    baseline = IdentityMethod()
+    shadow_a = NoisyIdentityMethod(method_id="trivial.shadow_a.v1", noise=0.01)
+    shadow_a.metadata = MethodMetadata(
+        "trivial.shadow_a.v1", "trivial_component", "ShadowA", "1", ""
+    )
+    shadow_b = NoisyIdentityMethod(method_id="trivial.shadow_b.v1", noise=0.05)
+    shadow_b.metadata = MethodMetadata(
+        "trivial.shadow_b.v1", "trivial_component", "ShadowB", "1", ""
+    )
+
+    register_method(baseline, MethodStatus.BASELINE)
+    register_method(shadow_a, MethodStatus.SHADOW)
+    register_method(shadow_b, MethodStatus.SHADOW)
+
+    data = np.linspace(-1, 1, 16)
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    end = datetime(2026, 2, 1, tzinfo=UTC)
+
+    results = run_comparisons_for_component(
+        "trivial_component",
+        IdentityComparator(),
+        data,
+        period_start=start,
+        period_end=end,
+        notes="multi-shadow smoke",
+    )
+
+    assert len(results) == 2
+    shadow_ids = {r.method_b_id for r in results}
+    assert shadow_ids == {"trivial.shadow_a.v1", "trivial.shadow_b.v1"}
+    for r in results:
+        assert r.method_a_id == "trivial.identity.v1"
+        assert r.component == "trivial_component"
+
+
+@pytest.mark.unit
+def test_run_comparisons_for_component_returns_empty_when_no_shadows() -> None:
+    from macro_trader.methods.comparator import run_comparisons_for_component
+    from macro_trader.methods.registry import register_method
+
+    register_method(IdentityMethod(), MethodStatus.BASELINE)
+
+    results = run_comparisons_for_component(
+        "trivial_component",
+        IdentityComparator(),
+        np.zeros(4),
+        period_start=datetime(2026, 1, 1, tzinfo=UTC),
+        period_end=datetime(2026, 1, 2, tzinfo=UTC),
+    )
+    assert results == []
+
+
+@pytest.mark.unit
+def test_run_comparisons_for_component_returns_empty_when_no_reference() -> None:
+    from macro_trader.methods.comparator import run_comparisons_for_component
+
+    # Nothing registered at all.
+    results = run_comparisons_for_component(
+        "nobody",
+        IdentityComparator(),
+        np.zeros(4),
+        period_start=datetime(2026, 1, 1, tzinfo=UTC),
+        period_end=datetime(2026, 1, 2, tzinfo=UTC),
+    )
+    assert results == []

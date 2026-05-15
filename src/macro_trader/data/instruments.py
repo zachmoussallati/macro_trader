@@ -80,3 +80,50 @@ def list_instruments(
     if active_only:
         stmt = stmt.where(Instrument.is_active.is_(True))
     return list(session.scalars(stmt))
+
+
+def get_class_groups(
+    session: Session,
+    instrument_ids: list[str],
+    *,
+    column: str = "asset_class",
+) -> dict[str, list[str]]:
+    """Group ``instrument_ids`` by their value in the named class column.
+
+    ``column`` is ``"asset_class"`` (default — coarse: energy /
+    base_metals / precious_metals / agriculture) or ``"sub_class"``
+    (fine: crude_oil / natural_gas / distillate / gasoline / copper /
+    aluminum / gold / silver / platinum / grains / oilseeds).
+
+    Returns a ``{group_label: [instrument_id, ...]}`` mapping. Each
+    group's id list preserves the input order. Instruments whose row
+    is missing or whose class value is NULL are dropped silently —
+    callers that need universe coverage should compare lengths.
+
+    Cross-sectional value ranking uses ``asset_class`` so each group
+    has at least 2 instruments to rank against; ``sub_class`` is too
+    fine-grained for that purpose (e.g. a "natural_gas" group of one
+    cannot be ranked). See notes/stage_4a/decisions.md.
+    """
+    if not instrument_ids:
+        return {}
+    if column not in ("asset_class", "sub_class"):
+        raise ValueError(f"column must be 'asset_class' or 'sub_class', got {column!r}")
+
+    rows = list(
+        session.scalars(
+            select(Instrument).where(Instrument.instrument_id.in_(instrument_ids))
+        )
+    )
+    by_id = {r.instrument_id: r for r in rows}
+
+    out: dict[str, list[str]] = {}
+    for instrument_id in instrument_ids:
+        inst = by_id.get(instrument_id)
+        if inst is None:
+            continue
+        label = getattr(inst, column)
+        if label is None:
+            continue
+        out.setdefault(label, []).append(instrument_id)
+    return out

@@ -159,6 +159,35 @@ class MethodRegistry:
                 return base
             raise MethodNotFoundError(f"no driving method for component {component!r}")
 
+    def reference_for(self, component: str) -> Method[Any, Any] | None:
+        """Resolve the "reference" method for a component for comparison runs.
+
+        Order: PRODUCTION -> BASELINE -> first-registered (any non-DEPRECATED
+        method with this component). Returns ``None`` if no method is
+        registered for the component at all.
+
+        Distinct from :meth:`production_for` in two ways:
+
+        - Falls back to first-registered instead of raising, so comparator
+          runners can no-op cleanly on partially-registered components.
+        - Excludes DEPRECATED methods from the first-registered fallback so
+          old methods don't accidentally drive comparisons after promotion.
+        """
+        with self._lock:
+            prod = self._find_one(component, MethodStatus.PRODUCTION)
+            if prod is not None:
+                return prod
+            base = self._find_one(component, MethodStatus.BASELINE)
+            if base is not None:
+                return base
+            for mid, method in self._methods.items():
+                if (
+                    method.metadata.component == component
+                    and self._statuses[mid] != MethodStatus.DEPRECATED
+                ):
+                    return method
+            return None
+
     def shadows_for(self, component: str) -> list[Method[Any, Any]]:
         with self._lock:
             return [
@@ -321,6 +350,11 @@ def set_status(
 
 def get_production(component: str) -> Method[Any, Any]:
     return _registry.production_for(component)
+
+
+def get_reference_method(component: str) -> Method[Any, Any] | None:
+    """Module-level convenience for ``MethodRegistry.reference_for``."""
+    return _registry.reference_for(component)
 
 
 def get_shadows(component: str) -> list[Method[Any, Any]]:

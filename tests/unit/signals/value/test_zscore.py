@@ -8,7 +8,6 @@ import pytest
 
 from macro_trader.signals.base import SignalInput
 from macro_trader.signals.value.methods import (
-    DEFAULT_SUB_CLASS_GROUPS,
     CrossSectionalValue,
     ZScoreValue,
 )
@@ -26,14 +25,15 @@ def test_cross_sectional_value_metadata() -> None:
     m = CrossSectionalValue()
     assert m.metadata.method_id == "value.cross_sectional.v1"
     assert m.metadata.component == "value_signal"
-    # Spec sub-class groupings.
-    assert m.sub_class_groups["agriculture"] == ["ZC", "ZS", "ZW"]
+    # Stage 4A: groupings come from market_data.instruments at compute
+    # time. The default column choice is asset_class.
+    assert m.class_column == "asset_class"
 
 
 @pytest.mark.unit
-def test_cross_sectional_value_uses_default_groups() -> None:
-    assert DEFAULT_SUB_CLASS_GROUPS["energy"] == ["CL", "BZ", "NG", "HO", "RB"]
-    assert "ALI" in DEFAULT_SUB_CLASS_GROUPS["base_metals"]
+def test_cross_sectional_value_accepts_sub_class_column_override() -> None:
+    m = CrossSectionalValue(class_column="sub_class")
+    assert m.class_column == "sub_class"
 
 
 @pytest.mark.unit

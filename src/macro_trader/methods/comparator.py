@@ -188,3 +188,49 @@ class MethodComparator(ABC, Generic[InputT, OutputT]):
         row = MethodComparisonRow(**result.to_db_row())
         session.add(row)
         session.flush()
+
+
+def run_comparisons_for_component(
+    component: str,
+    comparator: MethodComparator[InputT, OutputT],
+    data: InputT,
+    *,
+    period_start: datetime,
+    period_end: datetime,
+    session: Session | None = None,
+    notes: str = "",
+) -> list[ComparisonResult]:
+    """Run ``comparator`` for every SHADOW vs the reference method.
+
+    Resolution: the registry's reference for ``component``
+    (PRODUCTION -> BASELINE -> first-registered). For each shadow, run
+    ``comparator.compare(reference, shadow, data, ...)`` and persist the
+    result if a session is provided.
+
+    Returns the list of comparison results (empty if there is no
+    reference method or no shadows registered). This is the function
+    Stage 4+ runners use in place of hardcoded ``(baseline, shadow)``
+    pairs — it scales to any number of shadows per component.
+    """
+    from macro_trader.methods.registry import get_reference_method, get_shadows
+
+    reference = get_reference_method(component)
+    shadows = get_shadows(component)
+    if reference is None or not shadows:
+        return []
+
+    results: list[ComparisonResult] = []
+    for shadow in shadows:
+        if shadow.metadata.method_id == reference.metadata.method_id:
+            continue
+        result = comparator.compare(
+            reference,
+            shadow,
+            data,
+            period_start=period_start,
+            period_end=period_end,
+            notes=notes,
+            session=session,
+        )
+        results.append(result)
+    return results

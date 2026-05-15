@@ -28,14 +28,11 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
 
-# Asset sub-class groupings, repeated here for clarity (kept in sync with
-# config.yaml under signals.value.cross_sectional.sub_class_groups).
-DEFAULT_SUB_CLASS_GROUPS: dict[str, list[str]] = {
-    "energy": ["CL", "BZ", "NG", "HO", "RB"],
-    "base_metals": ["HG", "ALI"],
-    "precious_metals": ["GC", "SI", "PL"],
-    "agriculture": ["ZC", "ZS", "ZW"],
-}
+# Stage 4A: cross-sectional groupings now come from the
+# ``market_data.instruments`` table at compute time via
+# ``get_class_groups``. The previous hardcoded dict has been removed; the
+# config block ``signals.value.cross_sectional.sub_class_groups`` is no
+# longer read.
 
 
 # ----------------------------------------------------------------------
@@ -136,16 +133,16 @@ class CrossSectionalValue(SignalMethod):
         self,
         *,
         lookback_window: int = 252,
-        sub_class_groups: dict[str, list[str]] | None = None,
+        class_column: str = "asset_class",
     ) -> None:
         self.lookback_window = int(lookback_window)
-        self.sub_class_groups = (
-            sub_class_groups if sub_class_groups is not None else DEFAULT_SUB_CLASS_GROUPS
-        )
+        self.class_column = class_column
 
     def compute(self, data: SignalInput, session: Session | None) -> list[SignalOutput]:
         if session is None:
             raise ValueError("CrossSectionalValue requires a DB session")
+        from macro_trader.data.instruments import get_class_groups
+
         load_start = data.start - timedelta(days=self.lookback_window + 60)
         panel = load_close_panel(
             session,
@@ -161,11 +158,15 @@ class CrossSectionalValue(SignalMethod):
         raw_z = _rolling_zscore_panel(log_prices, window=self.lookback_window)
         signal_raw = np.tanh(-raw_z.clip(lower=-3.0, upper=3.0))
 
+        sub_class_groups = get_class_groups(
+            session, data.instrument_ids, column=self.class_column
+        )
+
         return _materialise_value_outputs(
             signal_raw=signal_raw,
             log_prices=log_prices,
             data=data,
-            sub_class_groups=self.sub_class_groups,
+            sub_class_groups=sub_class_groups,
         )
 
 
@@ -231,4 +232,4 @@ def _materialise_value_outputs(
     return outputs
 
 
-__all__ = ["DEFAULT_SUB_CLASS_GROUPS", "CrossSectionalValue", "ZScoreValue"]
+__all__ = ["CrossSectionalValue", "ZScoreValue"]

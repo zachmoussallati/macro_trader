@@ -99,4 +99,75 @@ sections below.
   lockfile is regenerated next time `uv sync` runs. The installed version
   (`respx==0.23.1`) is well within the floor.
 
+## 7. Phase 1a: `reference_for` falls back to first-registered
+
+- **What**: Added `MethodRegistry.reference_for(component)` returning the
+  resolution `PRODUCTION -> BASELINE -> first-non-DEPRECATED-registered`,
+  with `None` for unknown components. Distinct from `production_for`,
+  which raises when no PRODUCTION/BASELINE exists.
+- **Why**: The new `run_comparisons_for_component` runner needs to
+  no-op cleanly when a component is partially registered (e.g.
+  positioning has shadows added before its baseline lands in a separate
+  commit). Raising forces every runner to wrap in try/except; returning
+  `None` lets the runner skip silently with one line.
+- **Excluded DEPRECATED from the fallback** so a freshly-deprecated
+  method does not accidentally drive comparisons after promotion.
+
+## 8. Phase 1a: comparator runner is module-level, not a registry method
+
+- **What**: `run_comparisons_for_component(component, comparator, data,
+  *, period_start, period_end, session=, notes="")` lives in
+  `macro_trader.methods.comparator`, not on `MethodRegistry`.
+- **Why**: The registry is concerned with registration + status. The
+  comparator runner pulls from the registry but also drives a
+  ``MethodComparator`` and persists ``ComparisonResult``. Co-locating
+  it with the comparator keeps the registry surface minimal and the
+  comparison-loop logic next to the abstractions it uses.
+
+## 9. Phase 1b: dashboard "designated" resolution lives in `signals.designated`
+
+- **What**: New module `macro_trader/signals/designated.py` exposes
+  `resolve(component)` and `resolve_id(component)`. The API router
+  (`api/routers/signals.py`) calls `resolve_id` per component when
+  building heatmap data, replacing the hardcoded
+  `DESIGNATED_PER_COMPONENT` dict.
+- **Resolution order**: config override (`signals.designated_per_component`
+  in `config/base.yaml`) -> registry PRODUCTION -> registry BASELINE
+  -> first-registered. Documented in the module docstring.
+- **Why config first**: Trend has three SMA BASELINEs plus an ensemble
+  BASELINE; the registry can't tiebreak without additional metadata.
+  Letting operators pin a method id via YAML is a single durable
+  override that survives method renames as long as the id stays
+  stable. Pointer to a missing id falls through to registry
+  resolution rather than 500ing.
+- **Side effect**: Added `SignalsSettings` (with
+  `model_config = {"extra": "ignore"}` to tolerate the existing
+  per-method yaml keys) to `macro_trader.config`. `Settings.signals`
+  is now a field; YAML's `signals.designated_per_component` block is
+  picked up.
+
+## 10. Phase 1c: cross-sectional groupings use `asset_class`, not `sub_class`
+
+- **What**: `CrossSectionalValue` no longer carries
+  `DEFAULT_SUB_CLASS_GROUPS`. The hardcoded dict is removed and
+  replaced by a `get_class_groups(session, instrument_ids, *, column=...)`
+  query against the `market_data.instruments` table at compute time.
+  Default column is **`asset_class`** (energy / base_metals /
+  precious_metals / agriculture).
+- **Why not `sub_class` as the Stage 4A prompt suggested**: the
+  current Stage-2 seed populates `sub_class` at *commodity* granularity
+  (crude_oil / natural_gas / distillate / gasoline / copper /
+  aluminum / gold / silver / platinum / grains / oilseeds). Groups of
+  one cannot be cross-sectionally ranked. `asset_class` is the
+  coarser grouping that matches the original `DEFAULT_SUB_CLASS_GROUPS`
+  exactly (a deliberately conservative choice — same semantics, just
+  DB-driven). The Stage 4A prompt's expected `sub_class` values
+  (`refined_products` for HO+RB, `grains` for ZC+ZS+ZW including
+  soybeans) don't match the seed either; rather than reseeding mid-
+  stage we expose the `class_column` constructor knob so a future
+  reseed + `class_column="sub_class"` switches over cleanly.
+- **Consequence**: `signals.value.cross_sectional.sub_class_groups`
+  YAML block is removed; replaced with `class_column: asset_class`.
+  Tests updated.
+
 <!-- Subsequent decisions appended as Stage 4A progresses. -->

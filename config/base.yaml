@@ -53,6 +53,14 @@ methods:
     default_cron: "0 6 * * *"
 
 signals:
+  # Operator override for the dashboard's "designated production-facing
+  # method" per component. Resolution order in
+  # macro_trader.signals.designated.resolve:
+  #   config override (this map) -> PRODUCTION -> BASELINE -> first-registered.
+  designated_per_component:
+    trend_signal: trend.ensemble.v1
+    carry_signal: carry.spot_proxy.v1
+    value_signal: value.zscore.v1
   trend:
     sma_short:
       fast: 10
@@ -81,11 +89,11 @@ signals:
     zscore:
       lookback_window: 252
     cross_sectional:
-      sub_class_groups:
-        energy: [CL, BZ, NG, HO, RB]
-        base_metals: [HG, ALI]
-        precious_metals: [GC, SI, PL]
-        agriculture: [ZC, ZS, ZW]
+      # Stage 4A: groupings now come from market_data.instruments at
+      # compute time. The previous sub_class_groups block has been
+      # removed; the column choice is configured per-method instance
+      # (default: asset_class).
+      class_column: asset_class
   output:
     zscore_lookback: 252
     rank_universe: all

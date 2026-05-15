@@ -119,6 +119,26 @@ class MethodsSettings(BaseModel):
     )
 
 
+class SignalsSettings(BaseModel):
+    """Signal-layer cross-cutting settings.
+
+    Most signal-method parameters live in the methods themselves
+    (constructor kwargs threaded through the registry). This block
+    captures cross-cutting policy that the API and runners need.
+
+    ``designated_per_component`` lets operators override the registry's
+    PRODUCTION/BASELINE resolution when a component intentionally has
+    multiple BASELINE methods (e.g. trend has three SMAs + one
+    ensemble; the dashboard wants to feature the ensemble). Resolution
+    order in :func:`macro_trader.signals.designated.resolve`:
+    config override -> PRODUCTION -> BASELINE -> first-registered.
+    """
+
+    model_config = {"extra": "ignore"}
+
+    designated_per_component: dict[str, str] = Field(default_factory=dict)
+
+
 # ----------------------------------------------------------------------
 # Top-level Settings
 # ----------------------------------------------------------------------
@@ -146,6 +166,7 @@ class Settings(BaseSettings):
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     data_sources: DataSourcesSettings = Field(default_factory=DataSourcesSettings)
     methods: MethodsSettings = Field(default_factory=MethodsSettings)
+    signals: SignalsSettings = Field(default_factory=SignalsSettings)
 
 
 # ----------------------------------------------------------------------
