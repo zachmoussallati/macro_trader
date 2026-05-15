@@ -227,4 +227,51 @@ sections below.
   distinguish "this is the new weekly print" from "today repeats
   Wednesday's value".
 
+## 16. Phase 3: PCA + DFM re-fit on every daily run, no weekly cadence yet
+
+- **What**: Both ``PCADislocation`` and ``DynamicFactorModel`` fit on
+  every ``compute()``. There is no separate refit asset; the daily
+  ``signal_dislocation`` asset runs everything end-to-end.
+- **Why**: PCA fit on a 13 x 252 panel is <1 second; daily refit is
+  cheap. DFM fit can take 30-60s but the daily asset budget can
+  absorb that on most days. Avoiding a separate refit asset keeps
+  this stage's diff small while leaving the natural structure in
+  place: the methods' constructors accept lookback / refit
+  parameters, and ``methods/base.py`` already has
+  ``serialize()`` / ``deserialize()`` hooks plus a
+  ``system.methods_registry.serialized_blob`` column ready for the
+  weekly cache. The follow-up is a Stage 4B/5 task tracked in
+  ``tradeoffs.md``.
+
+## 17. Phase 3: DFM convergence failures degrade gracefully
+
+- **What**: If ``statsmodels.tsa.statespace.DynamicFactor.fit`` raises
+  (convergence failure / non-stationarity / etc.), the method
+  logs a warning and returns ``[]``. The daily runner persists
+  whatever PCA produced and the comparator gracefully reports
+  ``n_observations_b=0``.
+- **Why**: DFM convergence on small synthetic samples is genuinely
+  flaky in statsmodels. Crashing the entire signals job for what is
+  registered as a SHADOW is the wrong trade-off: the BASELINE keeps
+  driving decisions, and the missing comparison run rolls forward
+  to the next day.
+- **Side effect on tests**: an integration test for DFM end-to-end
+  is deliberately not committed in Stage 4A; the unit-level methods
+  test exercises the metadata + interface contract, and the
+  comparator test covers the empty-B path. A real-data backfill in
+  Stage 9 will be the first place DFM convergence is exercised
+  systematically.
+
+## 18. Phase 3: dislocation signal = -tanh(residual.clip(-3, 3))
+
+- **What**: Both methods squash residuals through ``-tanh`` with the
+  z-score clipped to [-3, 3]. Sign convention: positive residual
+  (instrument outperformed peer prediction) -> contrarian short ->
+  negative ``raw_value``. Confidence scales with explained variance
+  (low explained_variance => weak factor structure => low confidence
+  weighting downstream).
+- **Why**: matches the project-wide long-bias convention (Stage 3
+  trend/value) and keeps the heatmap colour scale consistent. Clip
+  before tanh avoids saturation flattening interesting tail signals.
+
 <!-- Subsequent decisions appended as Stage 4A progresses. -->

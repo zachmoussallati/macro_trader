@@ -17,6 +17,7 @@ from dagster import (
 
 from macro_trader.db.engine import get_sessionmaker
 from macro_trader.signals.carry.runner import run_daily_carry
+from macro_trader.signals.dislocation.runner import run_daily_dislocation
 from macro_trader.signals.positioning.runner import run_daily_positioning
 from macro_trader.signals.trend.runner import run_daily_trend
 from macro_trader.signals.value.runner import run_daily_value
@@ -119,4 +120,38 @@ def signal_positioning(
     return MaterializeResult(metadata=_summarise(written))
 
 
-SIGNAL_ASSETS = [signal_trend, signal_carry, signal_value, signal_positioning]
+@asset(
+    group_name="signals_dislocation",
+    description=(
+        "Daily cross-asset dislocation signals (PCA baseline + DFM "
+        "shadow). DFM fit is slow (~30-60s) and may fail on small "
+        "samples; PCA always succeeds when at least n_components+1 "
+        "instruments have full history. Note: Stage 4A re-fits both on "
+        "every run; the future weekly-refit asset with serialised state "
+        "is documented in notes/stage_4a/tradeoffs.md."
+    ),
+    ins={
+        "ingest_yfinance_bars": AssetIn(key="ingest_yfinance_bars"),
+        "daily_data_quality": AssetIn(key="daily_data_quality"),
+    },
+)
+def signal_dislocation(
+    context: AssetExecutionContext,
+    ingest_yfinance_bars: None,
+    daily_data_quality: None,
+) -> MaterializeResult:
+    session_factory = get_sessionmaker()
+    with session_factory() as session:
+        written = run_daily_dislocation(session)
+        session.commit()
+    context.log.info(f"signals.dislocation.written={written}")
+    return MaterializeResult(metadata=_summarise(written))
+
+
+SIGNAL_ASSETS = [
+    signal_trend,
+    signal_carry,
+    signal_value,
+    signal_positioning,
+    signal_dislocation,
+]

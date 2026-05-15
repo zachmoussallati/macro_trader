@@ -369,6 +369,91 @@ def positioning_cot(
     ]
 
 
+class DislocationFactorOut(BaseModel):
+    """One per-instrument dislocation snapshot for ``/signals/dislocation/factors``."""
+
+    instrument_id: str
+    method_id: str
+    value_ts: datetime
+    raw_value: float | None
+    zscore: float | None
+    rank: float | None
+    confidence: float | None
+    explained_variance: float | None
+
+
+@router.get(
+    "/dislocation/factors", response_model=list[DislocationFactorOut]
+)
+def dislocation_factors(
+    session: SessionDep,
+    method_id: str = Query(
+        default="dislocation.pca.v1",
+        description="Which dislocation method's snapshot to read.",
+    ),
+    as_of: datetime | None = Query(default=None),
+) -> list[DislocationFactorOut]:
+    """Latest per-instrument dislocation snapshot for the requested method.
+
+    Returns one row per instrument with the most recent ``signal_value``
+    visible at ``as_of`` plus the method's stored
+    ``metadata.explained_variance``. Stage 4A's PCA + DFM are re-fit
+    on every run so the explained-variance field reflects the latest
+    fit; a future weekly-refit asset will persist fitted state into the
+    registry blob (see notes/stage_4a/tradeoffs.md)."""
+    if method_id not in ("dislocation.pca.v1", "dislocation.dfm.v1"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unknown dislocation method_id {method_id!r}; "
+                "expected dislocation.pca.v1 or dislocation.dfm.v1"
+            ),
+        )
+    target = as_of if as_of is not None else utcnow()
+    subq = (
+        select(
+            SignalValue.instrument_id.label("inst"),
+            func.max(SignalValue.value_ts).label("max_value_ts"),
+        )
+        .where(SignalValue.signal_id == method_id)
+        .where(SignalValue.observation_ts <= target)
+        .group_by(SignalValue.instrument_id)
+        .subquery()
+    )
+    stmt = (
+        select(SignalValue)
+        .join(
+            subq,
+            and_(
+                SignalValue.instrument_id == subq.c.inst,
+                SignalValue.value_ts == subq.c.max_value_ts,
+                SignalValue.signal_id == method_id,
+            ),
+        )
+        .where(SignalValue.observation_ts <= target)
+    )
+    rows = list(session.scalars(stmt))
+    out: list[DislocationFactorOut] = []
+    for r in rows:
+        explained = None
+        meta = r.signal_metadata or {}
+        if isinstance(meta, dict):
+            explained = _opt_float(meta.get("explained_variance"))
+        out.append(
+            DislocationFactorOut(
+                instrument_id=r.instrument_id,
+                method_id=method_id,
+                value_ts=r.value_ts,
+                raw_value=_opt_float(r.raw_value),
+                zscore=_opt_float(r.zscore),
+                rank=_opt_float(r.rank),
+                confidence=_opt_float(r.confidence),
+                explained_variance=explained,
+            )
+        )
+    return out
+
+
 class DecayPointOut(BaseModel):
     value_ts: datetime
     rolling_sharpe_252: float | None

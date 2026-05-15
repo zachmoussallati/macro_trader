@@ -62,6 +62,7 @@ signals:
     carry_signal: carry.spot_proxy.v1
     value_signal: value.zscore.v1
     positioning_signal: positioning.cot_zscore.v1
+    dislocation_signal: dislocation.pca.v1
   trend:
     sma_short:
       fast: 10
@@ -97,6 +98,23 @@ signals:
       min_history_weeks: 52
       extreme_threshold: 2.0
       report_type: legacy
+  dislocation:
+    pca:
+      lookback_days: 252
+      n_components: 3
+      min_history_days: 252
+    dfm:
+      lookback_days: 504
+      n_factors: 3
+      k_ar: 1
+      maxiter: 200
+      min_history_days: 504
+    refit:
+      # Stage 4A re-fits on each daily run for both methods. A weekly
+      # refit asset that persists fitted state to
+      # system.methods_registry.serialized_blob is the next step; see
+      # notes/stage_4a/tradeoffs.md.
+      cadence: daily
   value:
     zscore:
       lookback_window: 252

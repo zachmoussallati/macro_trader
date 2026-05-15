@@ -39,12 +39,13 @@ def register_all_methods(session: Session) -> None:
         log.info("methods.setup.skipped", component="data_quality", reason="module not present")
 
     # ----- Stage 3: signal library part 1 -----
-    # ----- Stage 4A: signal library part 2 (positioning) -----
+    # ----- Stage 4A: signal library part 2 (positioning + dislocation) -----
     for component, importer in (
         ("trend_signal", "macro_trader.signals.trend.register"),
         ("carry_signal", "macro_trader.signals.carry.register"),
         ("value_signal", "macro_trader.signals.value.register"),
         ("positioning_signal", "macro_trader.signals.positioning.register"),
+        ("dislocation_signal", "macro_trader.signals.dislocation.register"),
     ):
         try:
             module = __import__(importer, fromlist=["register"])
