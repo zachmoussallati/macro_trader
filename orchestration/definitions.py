@@ -26,6 +26,7 @@ from orchestration.assets import (
     ALL_ASSETS,
     daily_data_quality,
     dislocation_models_refit,
+    factor_exposure_models_refit,
     heartbeat_asset,
     ingest_cftc_cot,
     ingest_eia,
@@ -37,6 +38,7 @@ from orchestration.assets import (
     refresh_calendar_events,
     signal_carry,
     signal_dislocation,
+    signal_factor_exposure,
     signal_positioning,
     signal_trend,
     signal_value,
@@ -127,10 +129,11 @@ compute_all_signals_job = define_asset_job(
         signal_value,
         signal_positioning,
         signal_dislocation,
+        signal_factor_exposure,
     ),
     description=(
         "Daily computation of trend + carry + value + positioning + "
-        "dislocation signals."
+        "dislocation + factor_exposure signals."
     ),
 )
 
@@ -138,6 +141,15 @@ dislocation_refit_job = define_asset_job(
     name="dislocation_refit_job",
     selection=AssetSelection.assets(dislocation_models_refit),
     description="Weekly refit of PCA + DFM dislocation models (Sunday 00:00 UTC).",
+)
+
+factor_exposure_refit_job = define_asset_job(
+    name="factor_exposure_refit_job",
+    selection=AssetSelection.assets(factor_exposure_models_refit),
+    description=(
+        "Weekly refit of OLS + RF + (optional) Causal Forest factor "
+        "exposure models (Sunday 01:00 UTC)."
+    ),
 )
 
 
@@ -202,6 +214,13 @@ SCHEDULES = [
         execution_timezone="UTC",
         description="Weekly refit of PCA + DFM dislocation models.",
     ),
+    ScheduleDefinition(
+        name="factor_exposure_refit_weekly_sunday_0100_utc",
+        cron_schedule="0 1 * * 0",
+        job=factor_exposure_refit_job,
+        execution_timezone="UTC",
+        description="Weekly refit of OLS + RF + CF factor exposure models.",
+    ),
 ]
 
 
@@ -225,6 +244,7 @@ defs = Definitions(
         data_quality_job,
         compute_all_signals_job,
         dislocation_refit_job,
+        factor_exposure_refit_job,
     ],
     schedules=SCHEDULES,
     resources=_resources(),

@@ -108,6 +108,8 @@ COMPONENTS_FOR_HEATMAP: tuple[str, ...] = (
     "value_signal",
     "positioning_signal",
     "dislocation_signal",
+    "factor_exposure_signal",
+    "catalyst_signal",
 )
 
 
@@ -367,6 +369,123 @@ def positioning_cot(
         )
         for r in rows
     ]
+
+
+class FactorZScoreOut(BaseModel):
+    """Latest factor z-scores for the heat-of-the-market view."""
+
+    factor_name: str
+    zscore: float | None
+    fred_series: str
+
+
+@router.get("/factor_exposure/factors", response_model=list[FactorZScoreOut])
+def factor_exposure_factors(
+    session: SessionDep,
+    as_of: datetime | None = Query(default=None),
+) -> list[FactorZScoreOut]:
+    """Latest macro factor z-scores (growth / inflation / liquidity /
+    usd / oil / risk_on). Drives the dashboard's factor heatmap header
+    and lets users see "what's the macro picture today?"."""
+    from macro_trader.signals.factor_exposure.factors import (
+        DEFAULT_FACTORS,
+        latest_factor_zscores,
+    )
+
+    target = as_of if as_of is not None else utcnow()
+    z = latest_factor_zscores(session, as_of=target)
+    out: list[FactorZScoreOut] = []
+    for spec in DEFAULT_FACTORS:
+        out.append(
+            FactorZScoreOut(
+                factor_name=spec.name,
+                zscore=_opt_float(z.get(spec.name)),
+                fred_series=spec.fred_series,
+            )
+        )
+    return out
+
+
+class FactorExposureLoadingOut(BaseModel):
+    """Per-instrument factor loading row for the factor heatmap."""
+
+    instrument_id: str
+    method_id: str
+    factor_loadings: dict[str, float]
+    raw_value: float | None
+    rank: float | None
+    confidence: float | None
+    value_ts: datetime
+
+
+@router.get(
+    "/factor_exposure/loadings", response_model=list[FactorExposureLoadingOut]
+)
+def factor_exposure_loadings(
+    session: SessionDep,
+    method_id: str = Query(default="factor_exposure.ols.v1"),
+    as_of: datetime | None = Query(default=None),
+) -> list[FactorExposureLoadingOut]:
+    """Per-instrument factor loadings + signal snapshot for the chosen
+    factor exposure method. Reads from ``signal_values.metadata.factor_loadings``."""
+    valid = {
+        "factor_exposure.ols.v1",
+        "factor_exposure.rf.v1",
+        "factor_exposure.causal_forest.v1",
+    }
+    if method_id not in valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unknown factor exposure method_id {method_id!r}",
+        )
+    target = as_of if as_of is not None else utcnow()
+    subq = (
+        select(
+            SignalValue.instrument_id.label("inst"),
+            func.max(SignalValue.value_ts).label("max_value_ts"),
+        )
+        .where(SignalValue.signal_id == method_id)
+        .where(SignalValue.observation_ts <= target)
+        .group_by(SignalValue.instrument_id)
+        .subquery()
+    )
+    stmt = (
+        select(SignalValue)
+        .join(
+            subq,
+            and_(
+                SignalValue.instrument_id == subq.c.inst,
+                SignalValue.value_ts == subq.c.max_value_ts,
+                SignalValue.signal_id == method_id,
+            ),
+        )
+        .where(SignalValue.observation_ts <= target)
+    )
+    rows = list(session.scalars(stmt))
+    out: list[FactorExposureLoadingOut] = []
+    for r in rows:
+        meta = r.signal_metadata or {}
+        loadings = (
+            meta.get("factor_loadings", {})
+            if isinstance(meta, dict)
+            else {}
+        )
+        out.append(
+            FactorExposureLoadingOut(
+                instrument_id=r.instrument_id,
+                method_id=method_id,
+                factor_loadings={
+                    k: float(v)
+                    for k, v in loadings.items()
+                    if isinstance(v, int | float)
+                },
+                raw_value=_opt_float(r.raw_value),
+                rank=_opt_float(r.rank),
+                confidence=_opt_float(r.confidence),
+                value_ts=r.value_ts,
+            )
+        )
+    return out
 
 
 class DislocationFactorOut(BaseModel):

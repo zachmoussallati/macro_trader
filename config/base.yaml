@@ -63,6 +63,7 @@ signals:
     value_signal: value.zscore.v1
     positioning_signal: positioning.cot_zscore.v1
     dislocation_signal: dislocation.pca.v1
+    factor_exposure_signal: factor_exposure.ols.v1
   trend:
     sma_short:
       fast: 10
@@ -98,6 +99,32 @@ signals:
       min_history_weeks: 52
       extreme_threshold: 2.0
       report_type: legacy
+  factor_exposure:
+    factors:
+      growth: { fred_series: "FRED:INDPRO", transform: yoy_change, zscore_window: 252 }
+      inflation: { fred_series: "FRED:CPIAUCSL", transform: yoy_change, zscore_window: 252 }
+      liquidity: { fred_series: "FRED:DFII2", transform: level_inverted, zscore_window: 252 }
+      usd: { fred_series: "FRED:DTWEXBGS", transform: 60d_return, zscore_window: 252 }
+      oil: { fred_series: "FRED:DCOILWTICO", transform: 60d_return, zscore_window: 252 }
+      risk_on: { fred_series: "FRED:VIXCLS", transform: 60d_change_inverted, zscore_window: 252 }
+    ols:
+      lookback_days: 252
+      min_history_days: 252
+    rf:
+      n_estimators: 200
+      max_depth: 5
+      min_samples_leaf: 20
+      lookback_days: 504
+      random_state: 42
+    causal_forest:
+      n_estimators: 200
+      min_samples_leaf: 20
+      lookback_days: 504
+      random_state: 42
+    refit:
+      cadence: weekly
+      day_of_week: 0
+      hour_utc: 1
   dislocation:
     pca:
       lookback_days: 252

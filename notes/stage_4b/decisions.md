@@ -119,4 +119,84 @@
   promise. If someone re-introduces a hardcoded fallback dict, this
   test breaks.
 
+## 9. Phase 1: EconML behind an optional `[ml]` extra (Option B)
+
+- **What**: `econml>=0.15.0` lives in
+  `[project.optional-dependencies].ml` rather than `dev`. Install
+  via `uv sync --extra ml` to pick up the Causal Forest method.
+- **Why Option B over Option A**: EconML pulls ~200 MB of transitive
+  ML deps. Production deploys (and most local dev shells) don't need
+  causal inference — they only need OLS + RF + the rest of the
+  signal stack. Putting EconML behind an extra keeps the default
+  install lean and forces operators to opt-in when they actually
+  want causal-method outputs.
+- **Graceful degradation**: `_econml_available()` is checked at
+  three places — `register.py` (logs `methods.setup.skipped` and
+  doesn't register the CF method), `runner.py` (CF is omitted from
+  `default_factor_exposure_methods`), and `refit.py` (CF refit is
+  skipped silently). The `CausalForestFactorExposure` constructor
+  itself raises `RuntimeError` immediately if EconML is missing —
+  loud and obvious if someone instantiates it by hand without the
+  extra.
+
+## 10. Phase 1: factor selection — six factors from FRED
+
+- **growth**     INDPRO yoy_change
+- **inflation**  CPIAUCSL yoy_change
+- **liquidity**  DFII2 level_inverted (lower real yields = more
+                 liquidity = positive factor)
+- **usd**        DTWEXBGS 60d_return (broad trade-weighted USD)
+- **oil**        DCOILWTICO 60d_return
+- **risk_on**    VIXCLS 60d_change_inverted (lower VIX change =
+                 risk-on)
+
+Two new FRED series added to `FRED_SERIES`: `DFII2`, `VIXCLS`.
+The other four were already ingested in Stage 2.
+
+## 11. Phase 1: OLS as baseline because it's the cleanest contract
+
+- **What**: `factor_exposure.ols.v1` (BASELINE), `.rf.v1` (SHADOW),
+  `.causal_forest.v1` (SHADOW gated on EconML).
+- **Why OLS as baseline**: closed-form, fast, R^2 is a clean
+  confidence score, betas are interpretable to a portfolio manager.
+  The shadows have to clear a pre-declared bar (sharpe / max_dd /
+  stability uplift) before promotion — not a vague "more
+  sophisticated" argument.
+
+## 12. Phase 1: composite score = -beta @ z_today
+
+- **What**: today's signal is the negation of the dot product of
+  fitted betas (or RF prediction / CATE for the shadows) with
+  today's factor z-scores. Squashed through tanh to bound in
+  [-1, 1]. ``zscore`` field stores the pre-tanh raw score.
+- **Sign convention**: positive raw_value = long bias. A positive
+  factor reading + positive exposure means the instrument is "ahead
+  of" the factor → contrarian short tilt → negative pre-tanh score
+  → tanh → negative raw_value. Matches the project-wide convention
+  established in Stage 3.
+
+## 13. Phase 1: refit cadence staggered Sunday 01:00 UTC
+
+- **What**: dislocation refit at Sunday 00:00 UTC (Stage 4B Phase
+  0.2); factor exposure refit at Sunday 01:00 UTC; catalyst refit
+  reserved for Sunday 02:00 UTC (Stage 4B Phase 2). One hour
+  between stages so a runaway refit on one family doesn't block the
+  next.
+- **Daily inference at 23:30 UTC** still runs all five (eventually
+  seven) signal families against whatever cached state is current.
+
+## 14. Phase 1: per-instrument fit, NOT per-instrument-row drop
+
+- **What**: `fit_on_panels` uses `inner-join + dropna(how=any)` to
+  align returns and factor panels. If one instrument has too many
+  NaN rows, the fit window shrinks for everyone — the entire fit
+  may fail with `_state = None` rather than dropping just that one
+  instrument.
+- **Why this trade-off**: simplifies the implementation; per-
+  instrument NaN handling needs a per-instrument loop with its own
+  alignment which adds complexity. The integration test
+  `test_ols_returns_no_state_when_inner_join_drops_too_many_rows`
+  pins the current behaviour. A per-instrument-skip refactor is
+  tracked in `tradeoffs.md`.
+
 <!-- Subsequent decisions appended as Stage 4B progresses. -->

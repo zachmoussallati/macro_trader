@@ -19,6 +19,10 @@ from macro_trader.db.engine import get_sessionmaker
 from macro_trader.signals.carry.runner import run_daily_carry
 from macro_trader.signals.dislocation.refit import run_weekly_refit as run_dislocation_refit
 from macro_trader.signals.dislocation.runner import run_daily_dislocation
+from macro_trader.signals.factor_exposure.refit import (
+    run_weekly_refit as run_factor_exposure_refit,
+)
+from macro_trader.signals.factor_exposure.runner import run_daily_factor_exposure
 from macro_trader.signals.positioning.runner import run_daily_positioning
 from macro_trader.signals.trend.runner import run_daily_trend
 from macro_trader.signals.value.runner import run_daily_value
@@ -184,6 +188,71 @@ def signal_dislocation(
     return MaterializeResult(metadata=_summarise(written))
 
 
+@asset(
+    group_name="signals_factor_exposure",
+    description=(
+        "Weekly refit (Sunday 01:00 UTC) of OLS + RF + (optional) "
+        "Causal Forest factor exposure models. Persists fitted state to "
+        "system.methods_registry.serialized_blob. Causal Forest is "
+        "skipped silently when the [ml] extra (EconML) is not installed."
+    ),
+    ins={
+        "ingest_yfinance_bars": AssetIn(key="ingest_yfinance_bars"),
+        "ingest_fred_series": AssetIn(key="ingest_fred_series"),
+    },
+)
+def factor_exposure_models_refit(
+    context: AssetExecutionContext,
+    ingest_yfinance_bars: None,
+    ingest_fred_series: None,
+) -> MaterializeResult:
+    session_factory = get_sessionmaker()
+    with session_factory() as session:
+        results = run_factor_exposure_refit(session)
+        session.commit()
+    sizes = {r.method_id: r.blob_size_bytes for r in results}
+    context.log.info(f"signals.factor_exposure.refit blob_sizes={sizes}")
+    return MaterializeResult(
+        metadata={
+            "n_methods_refit": MetadataValue.int(len(results)),
+            "blob_sizes_bytes": MetadataValue.json(sizes),
+            "instruments_per_method": MetadataValue.json(
+                {r.method_id: r.instruments for r in results}
+            ),
+        }
+    )
+
+
+@asset(
+    group_name="signals_factor_exposure",
+    description=(
+        "Daily factor exposure signals (OLS baseline + RF shadow + "
+        "optional Causal Forest shadow). Reads fitted state from the "
+        "weekly factor_exposure_models_refit asset; falls back to "
+        "fitting on the daily window if no state exists."
+    ),
+    ins={
+        "ingest_yfinance_bars": AssetIn(key="ingest_yfinance_bars"),
+        "ingest_fred_series": AssetIn(key="ingest_fred_series"),
+        "daily_data_quality": AssetIn(key="daily_data_quality"),
+        "factor_exposure_models_refit": AssetIn(key="factor_exposure_models_refit"),
+    },
+)
+def signal_factor_exposure(
+    context: AssetExecutionContext,
+    ingest_yfinance_bars: None,
+    ingest_fred_series: None,
+    daily_data_quality: None,
+    factor_exposure_models_refit: None,
+) -> MaterializeResult:
+    session_factory = get_sessionmaker()
+    with session_factory() as session:
+        written = run_daily_factor_exposure(session)
+        session.commit()
+    context.log.info(f"signals.factor_exposure.written={written}")
+    return MaterializeResult(metadata=_summarise(written))
+
+
 SIGNAL_ASSETS = [
     signal_trend,
     signal_carry,
@@ -191,4 +260,6 @@ SIGNAL_ASSETS = [
     signal_positioning,
     dislocation_models_refit,
     signal_dislocation,
+    factor_exposure_models_refit,
+    signal_factor_exposure,
 ]

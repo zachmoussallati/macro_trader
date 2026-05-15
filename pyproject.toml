@@ -62,6 +62,12 @@ dev = [
     "types-passlib>=1.7.7",
     "types-python-jose>=3.3.4",
 ]
+# Causal-ML extras for Stage 4B+ (factor exposure causal forest,
+# catalyst causal sensitivity). Heavy install (~200 MB); install via
+# `uv sync --extra ml` only when needed.
+ml = [
+    "econml>=0.15.0",
+]
 
 [project.scripts]
 macro-trader = "macro_trader.__main__:main"

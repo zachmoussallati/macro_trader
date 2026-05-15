@@ -92,6 +92,9 @@ FRED_SERIES: tuple[FREDSeriesSpec, ...] = (
     ("DGS3MO", "3-Month Treasury Constant Maturity Rate", "daily", "Percent", None, "rates", ()),
     ("FEDFUNDS", "Federal Funds Effective Rate", "monthly", "Percent", None, "rates", ()),
     ("SOFR", "Secured Overnight Financing Rate", "daily", "Percent", None, "rates", ()),
+    # Stage 4B factor inputs:
+    ("DFII2", "2-Year Treasury Inflation-Indexed Real Yield", "daily", "Percent", None, "rates", ()),
+    ("VIXCLS", "CBOE Volatility Index: VIX", "daily", "Index", None, "risk", ()),
     # ----- USD strength -----
     (
         "DTWEXBGS",
