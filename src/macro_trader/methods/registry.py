@@ -359,3 +359,36 @@ def get_reference_method(component: str) -> Method[Any, Any] | None:
 
 def get_shadows(component: str) -> list[Method[Any, Any]]:
     return _registry.shadows_for(component)
+
+
+# ----------------------------------------------------------------------
+# Serialized-blob helpers (Stage 4B)
+# ----------------------------------------------------------------------
+def store_serialized_blob(
+    session: Session, method_id: str, blob: bytes
+) -> None:
+    """Persist fitted state for ``method_id`` into
+    ``system.methods_registry.serialized_blob``.
+
+    Used by the weekly-refit Dagster assets that fit PCA / DFM /
+    factor-exposure / catalyst models and stash the result for the
+    daily inference asset to deserialize.
+    """
+    from macro_trader.db.models.system import MethodRegistryRow
+
+    row = session.get(MethodRegistryRow, method_id)
+    if row is None:
+        raise MethodNotFoundError(method_id)
+    row.serialized_blob = blob
+    session.flush()
+
+
+def load_serialized_blob(session: Session, method_id: str) -> bytes | None:
+    """Read fitted state for ``method_id``. Returns ``None`` if either
+    the method is not registered yet or no blob has been stored."""
+    from macro_trader.db.models.system import MethodRegistryRow
+
+    row = session.get(MethodRegistryRow, method_id)
+    if row is None:
+        return None
+    return row.serialized_blob

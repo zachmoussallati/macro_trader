@@ -15,6 +15,7 @@ from orchestration.assets.ingest import (
 )
 from orchestration.assets.signals import (
     SIGNAL_ASSETS,
+    dislocation_models_refit,
     signal_carry,
     signal_dislocation,
     signal_positioning,
@@ -37,6 +38,7 @@ __all__ = [
     "INGEST_ASSETS",
     "SIGNAL_ASSETS",
     "daily_data_quality",
+    "dislocation_models_refit",
     "heartbeat_asset",
     "ingest_cftc_cot",
     "ingest_eia",

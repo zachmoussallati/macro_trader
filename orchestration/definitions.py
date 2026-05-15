@@ -25,6 +25,7 @@ from macro_trader.methods.setup import register_all_methods
 from orchestration.assets import (
     ALL_ASSETS,
     daily_data_quality,
+    dislocation_models_refit,
     heartbeat_asset,
     ingest_cftc_cot,
     ingest_eia,
@@ -133,6 +134,12 @@ compute_all_signals_job = define_asset_job(
     ),
 )
 
+dislocation_refit_job = define_asset_job(
+    name="dislocation_refit_job",
+    selection=AssetSelection.assets(dislocation_models_refit),
+    description="Weekly refit of PCA + DFM dislocation models (Sunday 00:00 UTC).",
+)
+
 
 # ----------------------------------------------------------------------
 # Schedules (all UTC)
@@ -186,7 +193,14 @@ SCHEDULES = [
         cron_schedule="30 23 * * *",
         job=compute_all_signals_job,
         execution_timezone="UTC",
-        description="Daily trend + carry + value signal computation.",
+        description="Daily trend + carry + value + positioning + dislocation signals.",
+    ),
+    ScheduleDefinition(
+        name="dislocation_refit_weekly_sunday_0000_utc",
+        cron_schedule="0 0 * * 0",
+        job=dislocation_refit_job,
+        execution_timezone="UTC",
+        description="Weekly refit of PCA + DFM dislocation models.",
     ),
 ]
 
@@ -210,6 +224,7 @@ defs = Definitions(
         ingest_all_job,
         data_quality_job,
         compute_all_signals_job,
+        dislocation_refit_job,
     ],
     schedules=SCHEDULES,
     resources=_resources(),

@@ -1,11 +1,19 @@
 """Daily runner for the cross-asset dislocation signal family.
 
-Both methods fit on each call for simplicity in Stage 4A. The PCA fit
-on a 13-instrument x 252-day panel is sub-second; DFM fit is ~30-60s on
-larger samples — acceptable for a daily asset, less so for an interactive
-query path. A weekly refit asset that persists fitted state via
-``system.methods_registry.serialized_blob`` is documented in
-``notes/stage_4a/tradeoffs.md`` as the natural next step.
+Stage 4B routes the daily run through the weekly-refitted models when
+present:
+
+1. Look up serialized fitted state for each method via
+   ``signals.dislocation.refit.load_pca_state`` /
+   ``load_dfm_state``.
+2. If state is present, the method's ``compute()`` skips the fit step
+   and uses the cached PCA / DFM directly.
+3. If no state exists yet (first run, or last week's refit failed),
+   the method falls back to fitting on the daily window — logged as
+   ``signals.dislocation.<method>.fallback_fit``.
+
+The dedicated weekly refit asset is wired separately
+(``orchestration/assets/signals.py:dislocation_models_refit``).
 """
 
 from __future__ import annotations
@@ -26,6 +34,7 @@ from macro_trader.signals.dislocation.methods import (
     DynamicFactorModel,
     PCADislocation,
 )
+from macro_trader.signals.dislocation.refit import load_dfm_state, load_pca_state
 from macro_trader.signals.output import persist_signal_outputs
 from macro_trader.utils.dates import utcnow
 
@@ -35,8 +44,24 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 
-def default_dislocation_methods() -> list[SignalMethod]:
-    return [PCADislocation(), DynamicFactorModel()]
+def default_dislocation_methods(session: Session | None = None) -> list[SignalMethod]:
+    """Build the daily method list, populating fitted state from the
+    weekly-refit blob when available."""
+    methods: list[SignalMethod] = []
+    if session is not None:
+        pca = load_pca_state(session)
+        if pca is not None:
+            methods.append(pca)
+        else:
+            methods.append(PCADislocation())
+        dfm = load_dfm_state(session)
+        if dfm is not None:
+            methods.append(dfm)
+        else:
+            methods.append(DynamicFactorModel())
+    else:
+        methods.extend([PCADislocation(), DynamicFactorModel()])
+    return methods
 
 
 def _active_instruments(session: Session) -> list[str]:
@@ -67,7 +92,7 @@ def run_daily_dislocation(
         end=now,
     )
 
-    methods = list(methods) if methods is not None else default_dislocation_methods()
+    methods = list(methods) if methods is not None else default_dislocation_methods(session)
     written: dict[str, int] = {}
     for method in methods:
         outputs = method.compute(sig_input, session)

@@ -17,6 +17,7 @@ from dagster import (
 
 from macro_trader.db.engine import get_sessionmaker
 from macro_trader.signals.carry.runner import run_daily_carry
+from macro_trader.signals.dislocation.refit import run_weekly_refit as run_dislocation_refit
 from macro_trader.signals.dislocation.runner import run_daily_dislocation
 from macro_trader.signals.positioning.runner import run_daily_positioning
 from macro_trader.signals.trend.runner import run_daily_trend
@@ -123,22 +124,57 @@ def signal_positioning(
 @asset(
     group_name="signals_dislocation",
     description=(
+        "Weekly refit (Sunday 00:00 UTC) of PCA + DFM dislocation "
+        "models. Persists fitted state to "
+        "system.methods_registry.serialized_blob; daily inference "
+        "(signal_dislocation) reads it. PCA components are sign-aligned "
+        "to the prior week's loadings so dashboard heatmaps stay "
+        "continuous across refits."
+    ),
+    ins={
+        "ingest_yfinance_bars": AssetIn(key="ingest_yfinance_bars"),
+    },
+)
+def dislocation_models_refit(
+    context: AssetExecutionContext,
+    ingest_yfinance_bars: None,
+) -> MaterializeResult:
+    session_factory = get_sessionmaker()
+    with session_factory() as session:
+        results = run_dislocation_refit(session)
+        session.commit()
+    sizes = {r.method_id: r.blob_size_bytes for r in results}
+    context.log.info(f"signals.dislocation.refit blob_sizes={sizes}")
+    return MaterializeResult(
+        metadata={
+            "n_methods_refit": MetadataValue.int(len(results)),
+            "blob_sizes_bytes": MetadataValue.json(sizes),
+            "explained_variance": MetadataValue.json(
+                {r.method_id: r.explained_variance for r in results}
+            ),
+        }
+    )
+
+
+@asset(
+    group_name="signals_dislocation",
+    description=(
         "Daily cross-asset dislocation signals (PCA baseline + DFM "
-        "shadow). DFM fit is slow (~30-60s) and may fail on small "
-        "samples; PCA always succeeds when at least n_components+1 "
-        "instruments have full history. Note: Stage 4A re-fits both on "
-        "every run; the future weekly-refit asset with serialised state "
-        "is documented in notes/stage_4a/tradeoffs.md."
+        "shadow). Reads fitted state from the weekly "
+        "dislocation_models_refit asset; falls back to fitting on the "
+        "daily window with a logged warning if no state exists."
     ),
     ins={
         "ingest_yfinance_bars": AssetIn(key="ingest_yfinance_bars"),
         "daily_data_quality": AssetIn(key="daily_data_quality"),
+        "dislocation_models_refit": AssetIn(key="dislocation_models_refit"),
     },
 )
 def signal_dislocation(
     context: AssetExecutionContext,
     ingest_yfinance_bars: None,
     daily_data_quality: None,
+    dislocation_models_refit: None,
 ) -> MaterializeResult:
     session_factory = get_sessionmaker()
     with session_factory() as session:
@@ -153,5 +189,6 @@ SIGNAL_ASSETS = [
     signal_carry,
     signal_value,
     signal_positioning,
+    dislocation_models_refit,
     signal_dislocation,
 ]
