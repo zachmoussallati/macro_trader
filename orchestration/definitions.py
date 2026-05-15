@@ -35,6 +35,7 @@ from orchestration.assets import (
     ingest_yfinance_bars,
     refresh_calendar_events,
     signal_carry,
+    signal_positioning,
     signal_trend,
     signal_value,
 )
@@ -118,8 +119,10 @@ data_quality_job = define_asset_job(
 
 compute_all_signals_job = define_asset_job(
     name="compute_all_signals_job",
-    selection=AssetSelection.assets(signal_trend, signal_carry, signal_value),
-    description="Daily computation of trend + carry + value signals.",
+    selection=AssetSelection.assets(
+        signal_trend, signal_carry, signal_value, signal_positioning
+    ),
+    description="Daily computation of trend + carry + value + positioning signals.",
 )
 
 

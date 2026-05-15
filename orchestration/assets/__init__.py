@@ -16,6 +16,7 @@ from orchestration.assets.ingest import (
 from orchestration.assets.signals import (
     SIGNAL_ASSETS,
     signal_carry,
+    signal_positioning,
     signal_trend,
     signal_value,
 )
@@ -45,6 +46,7 @@ __all__ = [
     "ingest_yfinance_bars",
     "refresh_calendar_events",
     "signal_carry",
+    "signal_positioning",
     "signal_trend",
     "signal_value",
 ]

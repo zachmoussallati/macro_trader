@@ -170,4 +170,61 @@ sections below.
   YAML block is removed; replaced with `class_column: asset_class`.
   Tests updated.
 
+## 11. Phase 2: COT lookback 156 weeks (3 years)
+
+- **What**: `CotZScore` and `CotCommercial` use a 156-week rolling
+  window with `min_history_weeks=52` (one year minimum before any
+  signal is emitted).
+- **Why**: Three years balances "covers a full cycle including a
+  notable extreme" against "doesn't include data so old the regime
+  has changed". Twelve months as the minimum keeps the early-history
+  ramp-up from emitting noise.
+- **Confidence ramp**: `confidence = min(1.0, history_weeks / 156)`.
+  An instrument with 30 weeks of history gets `confidence=0.19`, so
+  the Stage 7 composite weighting will weight its raw positioning
+  signal accordingly.
+
+## 12. Phase 2: sign-inverted via tanh, z-score recoverable via arctanh
+
+- **What**: `raw_value = -tanh(z.clip(-3, 3))`. The persisted
+  `SignalOutput.zscore` field is `arctanh(raw_value)` so consumers can
+  recover the underlying z-score (up to the clip).
+- **Why**: tanh keeps values in [-1, 1] for the dashboard heatmap
+  and Stage 7 composite. Storing the z-score lets the methods page
+  show "this is a 2.5-sigma event" without an extra column.
+
+## 13. Phase 2: per-instrument try/except style ≠ FRED's
+
+- **What**: positioning `compute()` iterates instrument-by-instrument,
+  calling `load_cot_as_of`. If a per-instrument loader returns an
+  empty DataFrame (or all-NaN net positioning), that instrument is
+  silently dropped from the output. No try/except wrapping each call
+  because the loader is in-process and pure-DB; failures bubble.
+- **Why**: differs from FRED-style "wrap each upstream call" because
+  the upstream here is our own loader, not a flaky HTTP source. Bad
+  upstream is the data-quality module's problem.
+
+## 14. Phase 2: comparator persistence sanitizes NaN -> None
+
+- **What**: `ComparisonResult.to_db_row()` now passes
+  `metrics`/`agreement`/`stability` through `_sanitize_nans`,
+  converting NaN and infinity to `None` for valid JSON.
+- **Why**: Postgres JSONB rejects `NaN`. The integration test for
+  positioning hit this first because empty `rolling_sharpe_252`
+  averages produce NaN; same bug would have triggered on any future
+  comparator with sparse data. One-line fix at the framework
+  boundary is preferable to per-comparator filtering.
+
+## 15. Phase 2: positioning Dagster asset depends on ingest_cftc_cot + daily_data_quality
+
+- **What**: `signal_positioning` Dagster asset depends on
+  `ingest_cftc_cot` (new COT data Friday) and `daily_data_quality`
+  (yesterday's quality flags). Added to `compute_all_signals_job` so
+  the existing 23:30 UTC schedule covers it.
+- **Why**: same dependency pattern as the trend / value assets. The
+  Friday COT publication arrives during the trading week; the asset
+  runs daily anyway so each row's `metadata.is_fresh_data` flag can
+  distinguish "this is the new weekly print" from "today repeats
+  Wednesday's value".
+
 <!-- Subsequent decisions appended as Stage 4A progresses. -->

@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import and_, func, select
 
 from api.deps import SessionDep
+from macro_trader.db.models.positioning import COTWeekly
 from macro_trader.db.models.signals import SignalValue
 from macro_trader.db.models.system import (
     MethodComparisonRow,
@@ -285,6 +286,87 @@ def list_signal_values(
     stmt = stmt.order_by(SignalValue.value_ts.desc()).limit(limit)
     rows = list(session.scalars(stmt))
     return [SignalValueOut.from_row(r) for r in rows]
+
+
+class PositioningCotPointOut(BaseModel):
+    """One COT row exposed via ``/signals/positioning/cot``."""
+
+    report_ts: datetime
+    publication_ts: datetime
+    report_type: str
+    open_interest: float | None
+    managed_money_long: float | None
+    managed_money_short: float | None
+    managed_money_net: float | None
+    producer_long: float | None
+    producer_short: float | None
+    producer_net: float | None
+    swap_long: float | None
+    swap_short: float | None
+    nonreportable_long: float | None
+    nonreportable_short: float | None
+
+
+def _net(long: float | None, short: float | None) -> float | None:
+    if long is None or short is None:
+        return None
+    return float(long) - float(short)
+
+
+@router.get("/positioning/cot", response_model=list[PositioningCotPointOut])
+def positioning_cot(
+    session: SessionDep,
+    instrument: str = Query(..., min_length=1, max_length=32),
+    report_type: str = Query(default="disaggregated"),
+    as_of: datetime | None = Query(default=None),
+    lookback_weeks: int = Query(default=156, ge=1, le=520),
+) -> list[PositioningCotPointOut]:
+    """Per-instrument COT breakdown over time, latest-vintage as of ``as_of``.
+
+    The positioning signal pages on the dashboard use this for the
+    stacked-area chart of managed money / commercials / nonreportable
+    long-short over time. ``report_type`` selects which CFTC report
+    breakdown to read (``disaggregated`` / ``legacy`` / ``financial_tff``).
+    """
+    if report_type not in ("disaggregated", "legacy", "financial_tff"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported report_type {report_type!r}; expected one of "
+                "disaggregated / legacy / financial_tff"
+            ),
+        )
+    target = as_of if as_of is not None else utcnow()
+    earliest = target - timedelta(weeks=lookback_weeks)
+    rows = list(
+        session.scalars(
+            select(COTWeekly)
+            .where(COTWeekly.instrument_id == instrument)
+            .where(COTWeekly.report_type == report_type)
+            .where(COTWeekly.publication_ts <= target)
+            .where(COTWeekly.report_ts >= earliest)
+            .order_by(COTWeekly.report_ts.asc())
+        )
+    )
+    return [
+        PositioningCotPointOut(
+            report_ts=r.report_ts,
+            publication_ts=r.publication_ts,
+            report_type=r.report_type,
+            open_interest=_opt_float(r.open_interest),
+            managed_money_long=_opt_float(r.managed_money_long),
+            managed_money_short=_opt_float(r.managed_money_short),
+            managed_money_net=_net(r.managed_money_long, r.managed_money_short),
+            producer_long=_opt_float(r.producer_long),
+            producer_short=_opt_float(r.producer_short),
+            producer_net=_net(r.producer_long, r.producer_short),
+            swap_long=_opt_float(r.swap_long),
+            swap_short=_opt_float(r.swap_short),
+            nonreportable_long=_opt_float(r.nonreportable_long),
+            nonreportable_short=_opt_float(r.nonreportable_short),
+        )
+        for r in rows
+    ]
 
 
 class DecayPointOut(BaseModel):

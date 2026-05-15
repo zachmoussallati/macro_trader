@@ -73,7 +73,14 @@ class ComparisonResult:
         )
 
     def to_db_row(self) -> dict[str, Any]:
-        """Serialise to the dict shape consumed by `MethodComparisonRow`."""
+        """Serialise to the dict shape consumed by `MethodComparisonRow`.
+
+        NaN values are converted to ``None`` so the metrics/agreement/
+        stability JSONB payloads stay valid JSON (Postgres rejects
+        ``NaN``). NaNs typically arise when a comparator computes an
+        average over an empty / fully-null column — semantically "no
+        data", which ``None`` represents cleanly.
+        """
         return {
             "comparison_id": self.comparison_id,
             "component": self.component,
@@ -81,12 +88,25 @@ class ComparisonResult:
             "method_b_id": self.method_b_id,
             "period_start": self.period_start,
             "period_end": self.period_end,
-            "metrics": dict(self.metrics),
-            "agreement": dict(self.agreement),
-            "stability": dict(self.stability),
+            "metrics": _sanitize_nans(self.metrics),
+            "agreement": _sanitize_nans(self.agreement),
+            "stability": _sanitize_nans(self.stability),
             "notes": self.notes,
             "created_at": self.created_at,
         }
+
+
+def _sanitize_nans(d: dict[str, float]) -> dict[str, float | None]:
+    """Replace NaN / +/-inf with None so the dict is JSON-serialisable."""
+    import math
+
+    out: dict[str, float | None] = {}
+    for k, v in d.items():
+        if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+            out[k] = None
+        else:
+            out[k] = v
+    return out
 
 
 class MethodComparator(ABC, Generic[InputT, OutputT]):

@@ -17,6 +17,7 @@ from dagster import (
 
 from macro_trader.db.engine import get_sessionmaker
 from macro_trader.signals.carry.runner import run_daily_carry
+from macro_trader.signals.positioning.runner import run_daily_positioning
 from macro_trader.signals.trend.runner import run_daily_trend
 from macro_trader.signals.value.runner import run_daily_value
 
@@ -93,4 +94,29 @@ def signal_value(
     return MaterializeResult(metadata=_summarise(written))
 
 
-SIGNAL_ASSETS = [signal_trend, signal_carry, signal_value]
+@asset(
+    group_name="signals_positioning",
+    description=(
+        "Daily positioning signals (managed-money z-score baseline + "
+        "commercial extremes shadow). Recomputes daily even when no new "
+        "COT data has landed; metadata.is_fresh_data flags new reports."
+    ),
+    ins={
+        "ingest_cftc_cot": AssetIn(key="ingest_cftc_cot"),
+        "daily_data_quality": AssetIn(key="daily_data_quality"),
+    },
+)
+def signal_positioning(
+    context: AssetExecutionContext,
+    ingest_cftc_cot: None,
+    daily_data_quality: None,
+) -> MaterializeResult:
+    session_factory = get_sessionmaker()
+    with session_factory() as session:
+        written = run_daily_positioning(session)
+        session.commit()
+    context.log.info(f"signals.positioning.written={written}")
+    return MaterializeResult(metadata=_summarise(written))
+
+
+SIGNAL_ASSETS = [signal_trend, signal_carry, signal_value, signal_positioning]

@@ -61,6 +61,7 @@ signals:
     trend_signal: trend.ensemble.v1
     carry_signal: carry.spot_proxy.v1
     value_signal: value.zscore.v1
+    positioning_signal: positioning.cot_zscore.v1
   trend:
     sma_short:
       fast: 10
@@ -85,6 +86,17 @@ signals:
       enabled_for: [CL, BZ, GC, NG]
       confidence_when_proxy_available: 0.3
       confidence_when_proxy_unavailable: 0.0
+  positioning:
+    cot_zscore:
+      lookback_weeks: 156
+      min_history_weeks: 52
+      extreme_threshold: 2.0
+      report_type: disaggregated
+    cot_commercial:
+      lookback_weeks: 156
+      min_history_weeks: 52
+      extreme_threshold: 2.0
+      report_type: legacy
   value:
     zscore:
       lookback_window: 252

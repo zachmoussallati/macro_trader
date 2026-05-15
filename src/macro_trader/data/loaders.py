@@ -23,7 +23,7 @@ All loaders take an ``as_of`` parameter that filters market-data rows on
 from __future__ import annotations
 
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
@@ -32,6 +32,7 @@ from sqlalchemy import or_, select
 
 from macro_trader.db.models.macro_data import SeriesObservation
 from macro_trader.db.models.market_data import DailyBar
+from macro_trader.db.models.positioning import COTWeekly
 from macro_trader.utils.dates import utcnow
 
 if TYPE_CHECKING:
@@ -197,6 +198,72 @@ def load_macro_series(
     idx = pd.to_datetime([r[0] for r in rows], utc=True)
     values = [float(r[1]) if r[1] is not None else float("nan") for r in rows]
     return pd.Series(values, index=idx, name=series_id)
+
+
+# ----------------------------------------------------------------------
+# Positioning data (CFTC COT)
+# ----------------------------------------------------------------------
+def load_cot_as_of(
+    session: Session,
+    instrument_id: str,
+    *,
+    as_of: datetime,
+    report_type: str = "disaggregated",
+    lookback_weeks: int = 156,
+) -> pd.DataFrame:
+    """Return COT rows for ``instrument_id`` known as-of ``as_of``.
+
+    Filters on ``publication_ts <= as_of`` so we only see reports that
+    had actually been published by ``as_of`` — Tuesday's report data is
+    only "known" after Friday publication. ``report_ts`` covers the
+    trailing ``lookback_weeks``.
+
+    Returned DataFrame is indexed by ``report_ts`` ascending with one
+    column per persisted breakdown (open_interest, managed_money_long,
+    ..., nonreportable_short). Empty if no rows match.
+    """
+    target = as_of
+    earliest_report_ts = target - timedelta(weeks=lookback_weeks)
+
+    stmt = (
+        select(COTWeekly)
+        .where(COTWeekly.instrument_id == instrument_id)
+        .where(COTWeekly.report_type == report_type)
+        .where(COTWeekly.publication_ts <= target)
+        .where(COTWeekly.report_ts >= earliest_report_ts)
+        .order_by(COTWeekly.report_ts.asc())
+    )
+    rows = list(session.scalars(stmt))
+    if not rows:
+        return pd.DataFrame()
+
+    records: list[dict[str, object]] = []
+    for row in rows:
+        records.append(
+            {
+                "report_ts": pd.Timestamp(row.report_ts),
+                "publication_ts": pd.Timestamp(row.publication_ts),
+                "open_interest": _none_to_nan(row.open_interest),
+                "producer_long": _none_to_nan(row.producer_long),
+                "producer_short": _none_to_nan(row.producer_short),
+                "swap_long": _none_to_nan(row.swap_long),
+                "swap_short": _none_to_nan(row.swap_short),
+                "managed_money_long": _none_to_nan(row.managed_money_long),
+                "managed_money_short": _none_to_nan(row.managed_money_short),
+                "other_reportable_long": _none_to_nan(row.other_reportable_long),
+                "other_reportable_short": _none_to_nan(row.other_reportable_short),
+                "nonreportable_long": _none_to_nan(row.nonreportable_long),
+                "nonreportable_short": _none_to_nan(row.nonreportable_short),
+            }
+        )
+    df = pd.DataFrame.from_records(records).set_index("report_ts").sort_index()
+    return df
+
+
+def _none_to_nan(value: object) -> float:
+    if value is None:
+        return float("nan")
+    return float(value)  # type: ignore[arg-type]
 
 
 # ----------------------------------------------------------------------
