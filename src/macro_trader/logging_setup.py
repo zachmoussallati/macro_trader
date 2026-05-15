@@ -38,10 +38,15 @@ def configure_logging(*, force: bool = False) -> None:
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         structlog.processors.StackInfoRenderer(),
-        structlog.processors.format_exc_info,
     ]
 
     if fmt == "json":
+        # JSONRenderer needs format_exc_info to flatten the traceback
+        # into a string field; ConsoleRenderer formats exceptions itself
+        # and warns when format_exc_info is in the chain ("Remove
+        # format_exc_info from your processor chain if you want pretty
+        # exceptions").
+        shared_processors.append(structlog.processors.format_exc_info)
         renderer: Processor = structlog.processors.JSONRenderer(sort_keys=True)
     else:
         renderer = structlog.dev.ConsoleRenderer(colors=sys.stderr.isatty())
