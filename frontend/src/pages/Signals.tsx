@@ -32,6 +32,8 @@ const COMPONENT_ORDER: Array<{ key: string; label: string }> = [
   { key: "trend_signal", label: "Trend" },
   { key: "carry_signal", label: "Carry" },
   { key: "value_signal", label: "Value" },
+  { key: "positioning_signal", label: "Positioning" },
+  { key: "dislocation_signal", label: "Dislocation" },
 ];
 
 export default function Signals() {
