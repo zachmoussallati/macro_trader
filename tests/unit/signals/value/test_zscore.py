@@ -25,15 +25,15 @@ def test_cross_sectional_value_metadata() -> None:
     m = CrossSectionalValue()
     assert m.metadata.method_id == "value.cross_sectional.v1"
     assert m.metadata.component == "value_signal"
-    # Stage 4A: groupings come from market_data.instruments at compute
-    # time. The default column choice is asset_class.
-    assert m.class_column == "asset_class"
+    # Stage 4B: default column is sub_class (after reseed); the previous
+    # asset_class default is still available as an override.
+    assert m.class_column == "sub_class"
 
 
 @pytest.mark.unit
-def test_cross_sectional_value_accepts_sub_class_column_override() -> None:
-    m = CrossSectionalValue(class_column="sub_class")
-    assert m.class_column == "sub_class"
+def test_cross_sectional_value_accepts_asset_class_column_override() -> None:
+    m = CrossSectionalValue(class_column="asset_class")
+    assert m.class_column == "asset_class"
 
 
 @pytest.mark.unit

@@ -88,4 +88,35 @@
   trigger an out-of-band refit (after universe expansion, after a
   bad week) without re-running every signal family.
 
+## 7. Phase 0.3: sub-class reseed groups
+
+- **What**: Updated the per-instrument `sub_class` values to coarse,
+  rankable groups:
+  - `crude_oil`: CL, BZ
+  - `refined_products`: NG, HO, RB (NG bundled here per the prompt
+    so we don't end up with a singleton group; same liquidity pillar)
+  - `base_metals`: HG, ALI
+  - `precious_metals`: GC, SI, PL
+  - `grains`: ZC, ZS, ZW
+- **Why bundle NG with refined_products**: Stage 4A's seed had NG as
+  its own `natural_gas` sub_class (singleton => unrankable). The
+  prompt suggests grouping NG with refined products even though it's
+  technically a separate commodity, because cross-sectional value
+  needs at least a pair to rank against. Within the energy
+  asset_class, refined_products is the closest peer set.
+- **`CrossSectionalValue` default flipped to `class_column="sub_class"`**:
+  the new sub_class column is now the canonical fine-grained grouping.
+  `class_column="asset_class"` stays available for callers that want
+  the coarser energy / base_metals / etc.
+
+## 8. Phase 0.3: integration test verifies "moving an instrument changes its rank"
+
+- **What**: `test_changing_instrument_sub_class_changes_rank` upserts
+  NG into `crude_oil` mid-run and re-runs `CrossSectionalValue`. The
+  test asserts NG's rank actually changes — proving the resolver
+  reads the live row, not a cached / hardcoded value.
+- **Why**: belt-and-braces for Phase 1c's "DB-driven groupings"
+  promise. If someone re-introduces a hardcoded fallback dict, this
+  test breaks.
+
 <!-- Subsequent decisions appended as Stage 4B progresses. -->

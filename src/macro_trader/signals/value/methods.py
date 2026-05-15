@@ -133,7 +133,7 @@ class CrossSectionalValue(SignalMethod):
         self,
         *,
         lookback_window: int = 252,
-        class_column: str = "asset_class",
+        class_column: str = "sub_class",
     ) -> None:
         self.lookback_window = int(lookback_window)
         self.class_column = class_column

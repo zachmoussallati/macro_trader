@@ -119,11 +119,12 @@ signals:
     zscore:
       lookback_window: 252
     cross_sectional:
-      # Stage 4A: groupings now come from market_data.instruments at
-      # compute time. The previous sub_class_groups block has been
-      # removed; the column choice is configured per-method instance
-      # (default: asset_class).
-      class_column: asset_class
+      # Groupings come from market_data.instruments at compute time.
+      # Stage 4B reseeded sub_class to coarse-but-rankable values
+      # (crude_oil / refined_products / base_metals / precious_metals
+      # / grains) so sub_class is now the default. asset_class is
+      # available as a fallback if you want even coarser groupings.
+      class_column: sub_class
   output:
     zscore_lookback: 252
     rank_universe: all
