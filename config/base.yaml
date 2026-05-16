@@ -65,6 +65,9 @@ signals:
     dislocation_signal: dislocation.pca.v1
     factor_exposure_signal: factor_exposure.ols.v1
     catalyst_signal: catalyst.event_study.v1
+    alt_data_signal: alt_data.eia_storage.v1
+    vol_surface_signal: vol_surface.raw.v1
+    nowcasting_signal: nowcasting.ols_ar.v1
   trend:
     sma_short:
       fast: 10
@@ -142,6 +145,23 @@ signals:
       cadence: weekly
       day_of_week: 0
       hour_utc: 2
+  alt_data:
+    eia_storage:
+      seasonal_window_years: 5
+      zscore_window_weeks: 156
+      affected_instruments: [CL, BZ, NG, HO, RB]
+    usda_wasde:
+      zscore_window_reports: 36
+      affected_instruments: [ZC, ZS, ZW]
+    google_trends:
+      smoothing_window_days: 7
+      zscore_window_days: 90
+      query_mapping:
+        oil_price: [CL, BZ]
+        gold: [GC]
+        copper_price: [HG]
+        buy_gold: [GC]
+        natural_gas: [NG]
   dislocation:
     pca:
       lookback_days: 252

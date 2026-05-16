@@ -37,6 +37,7 @@ from orchestration.assets import (
     ingest_usda,
     ingest_yfinance_bars,
     refresh_calendar_events,
+    signal_alt_data,
     signal_carry,
     signal_catalyst,
     signal_dislocation,
@@ -133,9 +134,10 @@ compute_all_signals_job = define_asset_job(
         signal_dislocation,
         signal_factor_exposure,
         signal_catalyst,
+        signal_alt_data,
     ),
     description=(
-        "Daily computation of all 7 signal families."
+        "Daily computation of all signal families."
     ),
 )
 

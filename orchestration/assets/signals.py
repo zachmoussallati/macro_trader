@@ -16,6 +16,7 @@ from dagster import (
 )
 
 from macro_trader.db.engine import get_sessionmaker
+from macro_trader.signals.alt_data.runner import run_daily_alt_data
 from macro_trader.signals.carry.runner import run_daily_carry
 from macro_trader.signals.catalyst.refit import run_weekly_refit as run_catalyst_refit
 from macro_trader.signals.catalyst.runner import run_daily_catalyst
@@ -317,6 +318,35 @@ def signal_catalyst(
     return MaterializeResult(metadata=_summarise(written))
 
 
+@asset(
+    group_name="signals_alt_data",
+    description=(
+        "Daily alt-data signals (EIA storage surprise + USDA WASDE "
+        "surprise + Google Trends sentiment composite). Stateless "
+        "transforms of already-ingested Stage 2 data; no refit asset."
+    ),
+    ins={
+        "ingest_eia": AssetIn(key="ingest_eia"),
+        "ingest_usda": AssetIn(key="ingest_usda"),
+        "ingest_google_trends": AssetIn(key="ingest_google_trends"),
+        "daily_data_quality": AssetIn(key="daily_data_quality"),
+    },
+)
+def signal_alt_data(
+    context: AssetExecutionContext,
+    ingest_eia: None,
+    ingest_usda: None,
+    ingest_google_trends: None,
+    daily_data_quality: None,
+) -> MaterializeResult:
+    session_factory = get_sessionmaker()
+    with session_factory() as session:
+        written = run_daily_alt_data(session)
+        session.commit()
+    context.log.info(f"signals.alt_data.written={written}")
+    return MaterializeResult(metadata=_summarise(written))
+
+
 SIGNAL_ASSETS = [
     signal_trend,
     signal_carry,
@@ -328,4 +358,5 @@ SIGNAL_ASSETS = [
     signal_factor_exposure,
     catalyst_models_refit,
     signal_catalyst,
+    signal_alt_data,
 ]

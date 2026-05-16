@@ -41,6 +41,7 @@ def register_all_methods(session: Session) -> None:
     # ----- Stage 3: signal library part 1 -----
     # ----- Stage 4A: signal library part 2 (positioning + dislocation) -----
     # ----- Stage 4B: factor exposure + catalyst -----
+    # ----- Stage 5: vol surface + nowcasting + alt-data -----
     for component, importer in (
         ("trend_signal", "macro_trader.signals.trend.register"),
         ("carry_signal", "macro_trader.signals.carry.register"),
@@ -49,6 +50,7 @@ def register_all_methods(session: Session) -> None:
         ("dislocation_signal", "macro_trader.signals.dislocation.register"),
         ("factor_exposure_signal", "macro_trader.signals.factor_exposure.register"),
         ("catalyst_signal", "macro_trader.signals.catalyst.register"),
+        ("alt_data_signal", "macro_trader.signals.alt_data.register"),
     ):
         try:
             module = __import__(importer, fromlist=["register"])
