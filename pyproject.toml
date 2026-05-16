@@ -177,6 +177,7 @@ markers = [
     "integration: integration tests (require Postgres)",
     "e2e: end-to-end tests (full stack)",
     "slow: slow tests",
+    "real_data: real-data backfill tests (require tests/data/backfill_504d.parquet; skipped if missing)",
 ]
 asyncio_mode = "auto"
 filterwarnings = [

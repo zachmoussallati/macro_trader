@@ -229,20 +229,32 @@ class EventStudyCatalyst(SignalMethod):
 # Causal Forest enhancement (gated on EconML)
 # ----------------------------------------------------------------------
 class CausalCatalyst(SignalMethod):
-    """Causal-inference catalyst sensitivity (CausalForestDML).
+    """Causal-inference catalyst sensitivity using CausalForestDML.
 
-    Same workflow shape as the baseline but with CATE estimates
-    replacing the unconditional mean(|return|). Gated on the
-    ``[ml]`` extra; constructor raises ``RuntimeError`` if EconML is
-    not installed.
+    Per (instrument, event_subject) pair with at least
+    ``min_events_for_cate`` historical instances, fits a
+    ``CausalForestDML`` with:
 
-    Stage 4B implements only the metadata + interface; full
-    CausalForestDML training over the historical event panel is
-    deferred to a Stage 4C / 9 pass once we have enough real data
-    for CATE to be stable. ``compute()`` falls back to the
-    event-study computation as a placeholder so the daily run still
-    produces a row per instrument while the Causal Forest stays
-    SHADOW-status.
+    - **Treatment**: binary (1 on event days, 0 on a stratified
+      sample of non-event days for the same instrument over the same
+      lookback window).
+    - **Outcome**: log-return in the [-1, +1] event window.
+    - **Controls (W)**: macro factor z-scores at the event date plus
+      the recent-vol baseline. Conditioning on regime is what makes
+      the CATE meaningfully different from the unconditional mean
+      that ``EventStudyCatalyst`` uses.
+
+    Pairs with fewer than ``min_events_for_cate`` events fall back
+    to the event-study sensitivity (logged with
+    ``cate_fallback=True`` in metadata) so the signal still produces
+    a per-instrument forward score on every day — the shadow
+    degrades gracefully rather than disappearing for under-served
+    pairs.
+
+    Daily inference: at ``as_of``, look up today's macro factor
+    z-scores; for each upcoming event use the CATE for its
+    (instrument, subject) at today's ``W``. Combine via the same
+    linear time-decay as the baseline.
     """
 
     metadata = MethodMetadata(
@@ -251,9 +263,9 @@ class CausalCatalyst(SignalMethod):
         name="Causal Inference Catalyst Sensitivity",
         version="1.0.0",
         description=(
-            "EconML CausalForestDML for conditional event sensitivities; "
-            "Stage 4B placeholder reuses the event-study sensitivity until "
-            "real-data CATE is wired in Stage 4C/9."
+            "CausalForestDML CATE per (instrument, event_subject) pair "
+            "conditional on macro regime; falls back to event-study "
+            "sensitivity for pairs without enough events."
         ),
         references=[
             "Chernozhukov et al. (2018) Double/Debiased ML",
@@ -269,6 +281,10 @@ class CausalCatalyst(SignalMethod):
         forward_window_days: int = 10,
         time_decay: str = "linear",
         min_events_for_estimate: int = 5,
+        min_events_for_cate: int = 15,
+        n_estimators: int = 200,
+        min_samples_leaf: int = 10,
+        random_state: int = 42,
         kinds: tuple[str, ...] = DEFAULT_EVENT_KINDS,
         importance: tuple[str, ...] = DEFAULT_IMPORTANCE,
     ) -> None:
@@ -277,9 +293,20 @@ class CausalCatalyst(SignalMethod):
                 "CausalCatalyst requires the optional `[ml]` extra; install with "
                 "`uv sync --extra ml` or omit this method from the registry."
             )
-        # Reuse the baseline's plumbing; signal differs only when
-        # CATE estimation lands (Stage 4C/9).
-        self._inner = EventStudyCatalyst(
+        self.event_window = event_window
+        self.lookback_years = int(lookback_years)
+        self.forward_window_days = int(forward_window_days)
+        self.time_decay = time_decay
+        self.min_events_for_estimate = int(min_events_for_estimate)
+        self.min_events_for_cate = int(min_events_for_cate)
+        self.n_estimators = int(n_estimators)
+        self.min_samples_leaf = int(min_samples_leaf)
+        self.random_state = int(random_state)
+        self.kinds = kinds
+        self.importance = importance
+        self._state: dict[str, Any] | None = None
+        # Re-use the baseline for the event-study fallback path.
+        self._fallback = EventStudyCatalyst(
             event_window=event_window,
             lookback_years=lookback_years,
             forward_window_days=forward_window_days,
@@ -289,33 +316,295 @@ class CausalCatalyst(SignalMethod):
             importance=importance,
         )
 
-    @property
-    def _state(self) -> dict[str, Any] | None:
-        return self._inner._state
-
+    # --- fit / serialize -----------------------------------------------
     def fit_on_session(
         self, session: Session, as_of: object, instrument_ids: list[str]
     ) -> None:
-        self._inner.fit_on_session(session, as_of, instrument_ids)
+        from datetime import datetime as _dt
+
+        as_of_dt = as_of if isinstance(as_of, _dt) else _dt.fromisoformat(str(as_of))
+
+        # Fit the fallback first; we'll need its sensitivities for any
+        # (instrument, subject) pair that doesn't clear ``min_events_for_cate``.
+        self._fallback.fit_on_session(session, as_of_dt, instrument_ids)
+        fallback_state = self._fallback._state
+        fallback_lookup: dict[tuple[str, str], float] = {}
+        if fallback_state is not None:
+            for s in fallback_state["sensitivities"]:
+                fallback_lookup[(s["instrument_id"], s["subject"])] = s["sensitivity"]
+
+        # Pull historicals + factor panel + price series.
+        historicals = historical_event_returns(
+            session,
+            instrument_ids=instrument_ids,
+            as_of=as_of_dt,
+            lookback_years=self.lookback_years,
+            event_window=self.event_window,
+            kinds=self.kinds,
+            importance=self.importance,
+        )
+        if not historicals:
+            log.info("signals.catalyst.causal.no_historicals")
+            self._state = None
+            return
+
+        from macro_trader.signals.factor_exposure.factors import build_factor_panel
+
+        factor_panel = build_factor_panel(
+            session, as_of=as_of_dt, lookback_days=int(self.lookback_years * 365)
+        )
+        if factor_panel.empty:
+            log.warning("signals.catalyst.causal.no_factor_panel_falling_back")
+            # Fall back entirely to the event-study state.
+            self._state = self._mark_state_from_fallback(fallback_lookup)
+            return
+
+        cates = self._fit_cates_per_pair(
+            historicals=historicals,
+            factor_panel=factor_panel,
+            fallback_lookup=fallback_lookup,
+        )
+
+        self._state = {
+            "cates": cates,
+            "factor_columns": list(factor_panel.columns),
+            "fit_as_of": as_of_dt.isoformat(),
+            "n_historicals": len(historicals),
+            "instruments": list(instrument_ids),
+        }
+
+    def _mark_state_from_fallback(
+        self, fallback_lookup: dict[tuple[str, str], float]
+    ) -> dict[str, Any]:
+        """Build a state dict that flags every pair as a fallback —
+        used when the factor panel is empty (no regime conditioning
+        possible)."""
+        cates: list[dict[str, Any]] = []
+        for (inst, subj), sens in fallback_lookup.items():
+            cates.append(
+                {
+                    "instrument_id": inst,
+                    "subject": subj,
+                    "cate_at_today": float(sens),
+                    "fallback": True,
+                    "n_events_used": 0,
+                }
+            )
+        return {
+            "cates": cates,
+            "factor_columns": [],
+            "fit_as_of": None,
+            "n_historicals": 0,
+            "instruments": [],
+        }
+
+    def _fit_cates_per_pair(
+        self,
+        *,
+        historicals: list[Any],
+        factor_panel: Any,
+        fallback_lookup: dict[tuple[str, str], float],
+    ) -> list[dict[str, Any]]:
+        """Fit one CausalForestDML per (instrument, subject) pair with
+        enough events, evaluate the CATE at today's regime
+        (W=last_row_of_factor_panel)."""
+        from collections import defaultdict
+
+        from econml.dml import CausalForestDML
+        from sklearn.ensemble import RandomForestRegressor
+
+        grouped: dict[tuple[str, str], list[Any]] = defaultdict(list)
+        for h in historicals:
+            grouped[(h.instrument_id, h.subject)].append(h)
+
+        # W at "today" = last available row of factor panel.
+        w_today = factor_panel.iloc[-1].to_numpy().reshape(1, -1)
+        factor_index = factor_panel.index
+        cates: list[dict[str, Any]] = []
+
+        for (inst, subj), events in grouped.items():
+            n_events = len(events)
+            if n_events < self.min_events_for_cate:
+                # Fall back to event-study sensitivity for this pair.
+                cates.append(
+                    {
+                        "instrument_id": inst,
+                        "subject": subj,
+                        "cate_at_today": float(fallback_lookup.get((inst, subj), 0.0)),
+                        "fallback": True,
+                        "n_events_used": n_events,
+                    }
+                )
+                continue
+
+            # Build (Y, T, W) for events.
+            event_w: list[Any] = []
+            event_y: list[float] = []
+            for h in events:
+                ts = pd.Timestamp(h.event_ts).tz_localize("UTC") if pd.Timestamp(h.event_ts).tzinfo is None else pd.Timestamp(h.event_ts).tz_convert("UTC")
+                # Find nearest factor-panel row at-or-before the event.
+                pos = factor_index.searchsorted(ts, side="right") - 1
+                if pos < 0 or pos >= len(factor_index):
+                    continue
+                w_row = factor_panel.iloc[pos].to_numpy()
+                if pd.isna(w_row).any():
+                    continue
+                event_w.append(w_row)
+                event_y.append(float(h.log_return))
+
+            if len(event_y) < self.min_events_for_cate:
+                cates.append(
+                    {
+                        "instrument_id": inst,
+                        "subject": subj,
+                        "cate_at_today": float(fallback_lookup.get((inst, subj), 0.0)),
+                        "fallback": True,
+                        "n_events_used": len(event_y),
+                    }
+                )
+                continue
+
+            # Stratified non-event sample of the same size for T=0.
+            non_event_idx = factor_panel.dropna(how="any").sample(
+                n=len(event_y), random_state=self.random_state, replace=False
+            )
+            non_w = non_event_idx.to_numpy()
+            non_y = [0.0] * len(non_event_idx)  # unconditional null effect
+
+            w = np.vstack([event_w, non_w])
+            y = np.array(event_y + non_y)
+            t = np.array([1] * len(event_y) + [0] * len(non_y))
+
+            try:
+                est = CausalForestDML(
+                    n_estimators=self.n_estimators,
+                    min_samples_leaf=self.min_samples_leaf,
+                    random_state=self.random_state,
+                    discrete_treatment=True,
+                    model_y=RandomForestRegressor(
+                        n_estimators=50, min_samples_leaf=10, random_state=self.random_state
+                    ),
+                    model_t=RandomForestRegressor(
+                        n_estimators=50, min_samples_leaf=10, random_state=self.random_state
+                    ),
+                )
+                est.fit(Y=y, T=t, X=w, W=w)
+                cate_today = float(est.const_marginal_effect(w_today)[0])
+            except Exception as exc:  # pragma: no cover - EconML edge cases
+                log.warning(
+                    "signals.catalyst.causal.fit_failed",
+                    instrument=inst,
+                    subject=subj,
+                    error=str(exc),
+                )
+                cates.append(
+                    {
+                        "instrument_id": inst,
+                        "subject": subj,
+                        "cate_at_today": float(fallback_lookup.get((inst, subj), 0.0)),
+                        "fallback": True,
+                        "n_events_used": len(event_y),
+                    }
+                )
+                continue
+
+            cates.append(
+                {
+                    "instrument_id": inst,
+                    "subject": subj,
+                    "cate_at_today": cate_today,
+                    "fallback": False,
+                    "n_events_used": len(event_y),
+                }
+            )
+
+        return cates
 
     def serialize(self) -> bytes:
-        return self._inner.serialize()
+        if self._state is None:
+            return b""
+        return pickle.dumps(self._state, protocol=pickle.HIGHEST_PROTOCOL)
 
     @classmethod
     def deserialize(cls, blob: bytes) -> CausalCatalyst:
         m = cls()
         if blob:
-            m._inner._state = pickle.loads(blob)
+            m._state = pickle.loads(blob)
         return m
 
+    # --- compute -------------------------------------------------------
     def compute(self, data: SignalInput, session: Session | None) -> list[SignalOutput]:
-        outputs = self._inner.compute(data, session)
-        # Re-tag the method_id so consumers see catalyst.causal.v1 not
-        # catalyst.event_study.v1 in the metadata blob.
-        for o in outputs:
-            if isinstance(o.metadata, dict):
-                o.metadata["method_id"] = self.metadata.method_id
-                o.metadata["placeholder_for_cate"] = True
+        if session is None:
+            raise ValueError("CausalCatalyst requires a DB session")
+        if self._state is None:
+            log.info("signals.catalyst.causal.fallback_fit")
+            self.fit_on_session(session, data.as_of, list(data.instrument_ids))
+            if self._state is None:
+                return []
+
+        # Build sensitivity lookup from CATEs.
+        sensitivity_lookup: dict[tuple[str, str], float] = {}
+        fallback_pairs = 0
+        for entry in self._state["cates"]:
+            sensitivity_lookup[(entry["instrument_id"], entry["subject"])] = float(
+                entry["cate_at_today"]
+            )
+            if entry.get("fallback"):
+                fallback_pairs += 1
+
+        scores = upcoming_score(
+            session,
+            instrument_ids=list(data.instrument_ids),
+            as_of=data.as_of,
+            sensitivities=[
+                EventSensitivity(
+                    instrument_id=inst,
+                    subject=subj,
+                    n_events=0,
+                    mean_abs_return=0.0,
+                    baseline_vol=0.0,
+                    sensitivity=cate,
+                )
+                for (inst, subj), cate in sensitivity_lookup.items()
+            ],
+            forward_window_days=self.forward_window_days,
+            decay="linear" if self.time_decay == "linear" else "exponential",
+            kinds=self.kinds,
+            importance=self.importance,
+        )
+
+        subject_counts: dict[str, int] = {}
+        for entry in self._state["cates"]:
+            subject_counts[entry["instrument_id"]] = subject_counts.get(
+                entry["instrument_id"], 0
+            ) + 1
+
+        ranks = cross_sectional_rank(
+            {k: abs(v) for k, v in scores.items() if v != 0.0}
+        )
+        outputs: list[SignalOutput] = []
+        for inst in data.instrument_ids:
+            raw_score = float(scores.get(inst, 0.0))
+            n_subjects = subject_counts.get(inst, 0)
+            confidence = max(0.05, min(1.0, n_subjects / 5.0))
+            outputs.append(
+                SignalOutput(
+                    instrument_id=inst,
+                    value_ts=data.as_of,
+                    observation_ts=data.as_of,
+                    raw_value=float(np.tanh(raw_score)),
+                    zscore=float(raw_score),
+                    rank=float(ranks.get(inst, 0.5)),
+                    confidence=float(confidence),
+                    rolling_sharpe_252=None,
+                    metadata={
+                        "method_id": self.metadata.method_id,
+                        "n_subjects": n_subjects,
+                        "fallback_pairs": fallback_pairs,
+                        "forward_window_days": self.forward_window_days,
+                    },
+                )
+            )
         return outputs
 
 

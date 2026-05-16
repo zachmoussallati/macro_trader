@@ -528,11 +528,14 @@ class CausalForestFactorExposure(SignalMethod):
                 continue
             cates: dict[str, float] = {}
             try:
-                # One CATE per factor: the i-th factor is the treatment,
-                # the rest are controls.
+                # One CATE per factor: factor i is the treatment, the
+                # rest serve as both heterogeneity features (X) and
+                # controls (W). EconML CausalForestDML requires X for
+                # CATE estimation; reusing the controls as X gives a
+                # dataset-average CATE via const_marginal_effect.
                 for _i, factor_name in enumerate(X.columns):
                     T = X[factor_name].values
-                    W = X.drop(columns=[factor_name]).values
+                    other_cols = X.drop(columns=[factor_name]).values
                     est = CausalForestDML(
                         n_estimators=self.n_estimators,
                         min_samples_leaf=self.min_samples_leaf,
@@ -545,8 +548,10 @@ class CausalForestFactorExposure(SignalMethod):
                             n_estimators=50, min_samples_leaf=10, random_state=self.random_state
                         ),
                     )
-                    est.fit(Y=y.values, T=T, W=W)
-                    cates[factor_name] = float(est.const_marginal_effect(W).mean())
+                    est.fit(Y=y.values, T=T, X=other_cols, W=other_cols)
+                    cates[factor_name] = float(
+                        est.const_marginal_effect(other_cols).mean()
+                    )
                 per_instrument[inst] = {
                     "cates": cates,
                     "pseudo_r2": 0.05,  # EconML doesn't report R2 directly

@@ -212,6 +212,20 @@ export interface DecayPoint {
   rolling_sharpe_252: number | null;
 }
 
+export interface ComparisonRow {
+  comparison_id: string;
+  component: string;
+  method_a_id: string;
+  method_b_id: string;
+  period_start: string;
+  period_end: string;
+  metrics: Record<string, number | null>;
+  agreement: Record<string, number | null>;
+  stability: Record<string, number | null>;
+  notes: string;
+  created_at: string;
+}
+
 // ---------------- Stage 4A/4B/4C: per-component shapes ----------------
 export interface PositioningCotPoint {
   report_ts: string;
@@ -370,7 +384,7 @@ export const apiMethods = {
       `/signals/${encodeURIComponent(signalId)}/decay?lookback_days=${lookbackDays}`,
     ),
   signalComparisons: (component?: string) =>
-    api.get<unknown[]>(
+    api.get<ComparisonRow[]>(
       `/signals/comparisons${component ? `?component=${encodeURIComponent(component)}` : ""}`,
     ),
 
