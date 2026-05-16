@@ -145,6 +145,18 @@ signals:
       cadence: weekly
       day_of_week: 0
       hour_utc: 2
+  nowcasting:
+    lookback_releases: 60
+    bvar:
+      own_lag_tightness: 0.05
+      indicator_tightness: 0.5
+      intercept_tightness: 100.0
+      a_0: 2.0
+      b_0: 1.0
+    refit:
+      cadence: weekly
+      day_of_week: 0
+      hour_utc: 3
   alt_data:
     eia_storage:
       seasonal_window_years: 5

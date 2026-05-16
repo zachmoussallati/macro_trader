@@ -26,6 +26,8 @@ from macro_trader.signals.factor_exposure.refit import (
     run_weekly_refit as run_factor_exposure_refit,
 )
 from macro_trader.signals.factor_exposure.runner import run_daily_factor_exposure
+from macro_trader.signals.nowcasting.refit import run_weekly_refit as run_nowcasting_refit
+from macro_trader.signals.nowcasting.runner import run_daily_nowcasting
 from macro_trader.signals.positioning.runner import run_daily_positioning
 from macro_trader.signals.trend.runner import run_daily_trend
 from macro_trader.signals.value.runner import run_daily_value
@@ -347,6 +349,65 @@ def signal_alt_data(
     return MaterializeResult(metadata=_summarise(written))
 
 
+@asset(
+    group_name="signals_nowcasting",
+    description=(
+        "Weekly refit of OLS-AR + BVAR nowcasting models "
+        "(Sunday 03:00 UTC, staggered after catalyst). Persists fitted "
+        "state per release to system.methods_registry.serialized_blob."
+    ),
+    ins={
+        "ingest_fred_series": AssetIn(key="ingest_fred_series"),
+    },
+)
+def nowcasting_models_refit(
+    context: AssetExecutionContext,
+    ingest_fred_series: None,
+) -> MaterializeResult:
+    session_factory = get_sessionmaker()
+    with session_factory() as session:
+        results = run_nowcasting_refit(session)
+        session.commit()
+    sizes = {r.method_id: r.blob_size_bytes for r in results}
+    context.log.info(f"signals.nowcasting.refit blob_sizes={sizes}")
+    return MaterializeResult(
+        metadata={
+            "n_methods_refit": MetadataValue.int(len(results)),
+            "blob_sizes_bytes": MetadataValue.json(sizes),
+            "releases_per_method": MetadataValue.json(
+                {r.method_id: r.n_releases_fitted for r in results}
+            ),
+        }
+    )
+
+
+@asset(
+    group_name="signals_nowcasting",
+    description=(
+        "Daily nowcasting signals (OLS-AR baseline + Bayesian-prior "
+        "shadow). Reads fitted state from nowcasting_models_refit; "
+        "falls back to fitting on the daily window if no state exists."
+    ),
+    ins={
+        "ingest_fred_series": AssetIn(key="ingest_fred_series"),
+        "daily_data_quality": AssetIn(key="daily_data_quality"),
+        "nowcasting_models_refit": AssetIn(key="nowcasting_models_refit"),
+    },
+)
+def signal_nowcasting(
+    context: AssetExecutionContext,
+    ingest_fred_series: None,
+    daily_data_quality: None,
+    nowcasting_models_refit: None,
+) -> MaterializeResult:
+    session_factory = get_sessionmaker()
+    with session_factory() as session:
+        written = run_daily_nowcasting(session)
+        session.commit()
+    context.log.info(f"signals.nowcasting.written={written}")
+    return MaterializeResult(metadata=_summarise(written))
+
+
 SIGNAL_ASSETS = [
     signal_trend,
     signal_carry,
@@ -359,4 +420,6 @@ SIGNAL_ASSETS = [
     catalyst_models_refit,
     signal_catalyst,
     signal_alt_data,
+    nowcasting_models_refit,
+    signal_nowcasting,
 ]

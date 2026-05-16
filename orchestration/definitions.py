@@ -36,12 +36,14 @@ from orchestration.assets import (
     ingest_noaa_weather,
     ingest_usda,
     ingest_yfinance_bars,
+    nowcasting_models_refit,
     refresh_calendar_events,
     signal_alt_data,
     signal_carry,
     signal_catalyst,
     signal_dislocation,
     signal_factor_exposure,
+    signal_nowcasting,
     signal_positioning,
     signal_trend,
     signal_value,
@@ -135,6 +137,7 @@ compute_all_signals_job = define_asset_job(
         signal_factor_exposure,
         signal_catalyst,
         signal_alt_data,
+        signal_nowcasting,
     ),
     description=(
         "Daily computation of all signal families."
@@ -161,6 +164,14 @@ catalyst_refit_job = define_asset_job(
     selection=AssetSelection.assets(catalyst_models_refit),
     description=(
         "Weekly refit of catalyst sensitivity models (Sunday 02:00 UTC)."
+    ),
+)
+
+nowcasting_refit_job = define_asset_job(
+    name="nowcasting_refit_job",
+    selection=AssetSelection.assets(nowcasting_models_refit),
+    description=(
+        "Weekly refit of OLS-AR + BVAR nowcasting models (Sunday 03:00 UTC)."
     ),
 )
 
@@ -240,6 +251,13 @@ SCHEDULES = [
         execution_timezone="UTC",
         description="Weekly refit of catalyst sensitivity models.",
     ),
+    ScheduleDefinition(
+        name="nowcasting_refit_weekly_sunday_0300_utc",
+        cron_schedule="0 3 * * 0",
+        job=nowcasting_refit_job,
+        execution_timezone="UTC",
+        description="Weekly refit of OLS-AR + BVAR nowcasting models.",
+    ),
 ]
 
 
@@ -265,6 +283,7 @@ defs = Definitions(
         dislocation_refit_job,
         factor_exposure_refit_job,
         catalyst_refit_job,
+        nowcasting_refit_job,
     ],
     schedules=SCHEDULES,
     resources=_resources(),
