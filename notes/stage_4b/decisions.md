@@ -199,4 +199,62 @@ The other four were already ingested in Stage 2.
   pins the current behaviour. A per-instrument-skip refactor is
   tracked in `tradeoffs.md`.
 
+## 15. Phase 2: catalyst event-study sensitivity = mean(|return|) - baseline_vol
+
+- **What**: Per (instrument, event_subject) pair, sensitivity =
+  ``mean(|log_return_in_window|) - baseline_vol`` with default
+  window [-1, +1] days around the event.
+- **Why subtract baseline_vol**: bare mean(|return|) overstates
+  catalyst impact when an instrument is just generally volatile.
+  Subtracting recent baseline vol (60-day std of log-returns) gives
+  the *abnormal* portion — closer to the canonical event-study
+  abnormal-return contract.
+- **Min events for estimate = 5**: subjects with fewer historical
+  instances are dropped silently. Five is a low bar but high enough
+  that one lucky reading can't dominate; the dashboard exposes
+  ``n_subjects`` per instrument so coverage gaps are visible.
+
+## 16. Phase 2: linear time-decay over a 10-day forward window
+
+- **What**: each upcoming event contributes
+  ``sensitivity * max(0, 1 - days_to_event / forward_window_days)``
+  to its instruments' forward score. Default window = 10 days.
+- **Why linear over exponential**: linear is more interpretable and
+  matches how a portfolio manager naturally weights "an FOMC three
+  days out" vs "in nine days". Exponential is selectable
+  (``decay="exponential"``); ten-day half-life is configured but
+  not the default.
+- **Sign convention**: forward score's *sign* is currently zero by
+  default (we don't know whether the next CPI will surprise high or
+  low). Magnitude carries the catalyst risk. Stage 6 (regime
+  classifier) will add directional priors via expected reaction by
+  regime.
+
+## 17. Phase 2: causal method is a Stage-4C placeholder
+
+- **What**: ``CausalCatalyst`` is registered as SHADOW when EconML
+  is installed, but its ``compute()`` currently delegates to
+  ``EventStudyCatalyst`` and re-tags ``method_id`` /
+  ``placeholder_for_cate=True`` in the metadata blob.
+- **Why ship the placeholder**: end-to-end wiring is testable now
+  (registry, refit blob, runner, Dagster asset, comparator pair).
+  The CATE estimation itself needs more careful work on synthetic-
+  data convergence and proper double-machine-learning splits — best
+  done against real backfills in Stage 4C / 9, not against Stage 4B's
+  thin synthetic test fixtures.
+- **What this means for the dashboard**: until Stage 4C, the two
+  catalyst methods produce identical signals. The methods page shows
+  both, but the comparator's value_correlation will be 1.0 — the
+  conventional indicator that the shadow hasn't differentiated yet.
+
+## 18. Phase 2: refit cadence Sunday 02:00 UTC
+
+- **What**: ``catalyst_models_refit`` runs Sunday 02:00 UTC,
+  staggered after dislocation (00:00) and factor exposure (01:00).
+- **Why**: same staggering rationale as Phase 1 (a runaway refit
+  shouldn't block downstream weekly assets). The historical-event
+  load + sensitivity computation across the trailing 5 years is
+  fast (<10 seconds for the current event volume) but will grow
+  with calendar coverage in Stage 5+.
+
 <!-- Subsequent decisions appended as Stage 4B progresses. -->

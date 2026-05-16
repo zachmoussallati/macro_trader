@@ -24,6 +24,7 @@ from macro_trader.methods.registry import get_default_registry
 from macro_trader.methods.setup import register_all_methods
 from orchestration.assets import (
     ALL_ASSETS,
+    catalyst_models_refit,
     daily_data_quality,
     dislocation_models_refit,
     factor_exposure_models_refit,
@@ -37,6 +38,7 @@ from orchestration.assets import (
     ingest_yfinance_bars,
     refresh_calendar_events,
     signal_carry,
+    signal_catalyst,
     signal_dislocation,
     signal_factor_exposure,
     signal_positioning,
@@ -130,10 +132,10 @@ compute_all_signals_job = define_asset_job(
         signal_positioning,
         signal_dislocation,
         signal_factor_exposure,
+        signal_catalyst,
     ),
     description=(
-        "Daily computation of trend + carry + value + positioning + "
-        "dislocation + factor_exposure signals."
+        "Daily computation of all 7 signal families."
     ),
 )
 
@@ -149,6 +151,14 @@ factor_exposure_refit_job = define_asset_job(
     description=(
         "Weekly refit of OLS + RF + (optional) Causal Forest factor "
         "exposure models (Sunday 01:00 UTC)."
+    ),
+)
+
+catalyst_refit_job = define_asset_job(
+    name="catalyst_refit_job",
+    selection=AssetSelection.assets(catalyst_models_refit),
+    description=(
+        "Weekly refit of catalyst sensitivity models (Sunday 02:00 UTC)."
     ),
 )
 
@@ -221,6 +231,13 @@ SCHEDULES = [
         execution_timezone="UTC",
         description="Weekly refit of OLS + RF + CF factor exposure models.",
     ),
+    ScheduleDefinition(
+        name="catalyst_refit_weekly_sunday_0200_utc",
+        cron_schedule="0 2 * * 0",
+        job=catalyst_refit_job,
+        execution_timezone="UTC",
+        description="Weekly refit of catalyst sensitivity models.",
+    ),
 ]
 
 
@@ -245,6 +262,7 @@ defs = Definitions(
         compute_all_signals_job,
         dislocation_refit_job,
         factor_exposure_refit_job,
+        catalyst_refit_job,
     ],
     schedules=SCHEDULES,
     resources=_resources(),

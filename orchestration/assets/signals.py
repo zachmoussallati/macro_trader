@@ -17,6 +17,8 @@ from dagster import (
 
 from macro_trader.db.engine import get_sessionmaker
 from macro_trader.signals.carry.runner import run_daily_carry
+from macro_trader.signals.catalyst.refit import run_weekly_refit as run_catalyst_refit
+from macro_trader.signals.catalyst.runner import run_daily_catalyst
 from macro_trader.signals.dislocation.refit import run_weekly_refit as run_dislocation_refit
 from macro_trader.signals.dislocation.runner import run_daily_dislocation
 from macro_trader.signals.factor_exposure.refit import (
@@ -253,6 +255,68 @@ def signal_factor_exposure(
     return MaterializeResult(metadata=_summarise(written))
 
 
+@asset(
+    group_name="signals_catalyst",
+    description=(
+        "Weekly refit (Sunday 02:00 UTC) of event-study + (optional) "
+        "causal catalyst sensitivity models. Estimates per-(instrument, "
+        "subject) sensitivities from the trailing 5 years of historical "
+        "events; persists to system.methods_registry.serialized_blob."
+    ),
+    ins={
+        "ingest_calendar": AssetIn(key="refresh_calendar_events"),
+        "ingest_yfinance_bars": AssetIn(key="ingest_yfinance_bars"),
+    },
+)
+def catalyst_models_refit(
+    context: AssetExecutionContext,
+    ingest_calendar: None,
+    ingest_yfinance_bars: None,
+) -> MaterializeResult:
+    session_factory = get_sessionmaker()
+    with session_factory() as session:
+        results = run_catalyst_refit(session)
+        session.commit()
+    sizes = {r.method_id: r.blob_size_bytes for r in results}
+    context.log.info(f"signals.catalyst.refit blob_sizes={sizes}")
+    return MaterializeResult(
+        metadata={
+            "n_methods_refit": MetadataValue.int(len(results)),
+            "blob_sizes_bytes": MetadataValue.json(sizes),
+            "subjects_per_method": MetadataValue.json(
+                {r.method_id: r.n_subjects for r in results}
+            ),
+        }
+    )
+
+
+@asset(
+    group_name="signals_catalyst",
+    description=(
+        "Daily catalyst sensitivity signals. Reads cached sensitivity "
+        "estimates from catalyst_models_refit and applies them to the "
+        "next 10 days of upcoming events with linear time-decay."
+    ),
+    ins={
+        "ingest_calendar": AssetIn(key="refresh_calendar_events"),
+        "daily_data_quality": AssetIn(key="daily_data_quality"),
+        "catalyst_models_refit": AssetIn(key="catalyst_models_refit"),
+    },
+)
+def signal_catalyst(
+    context: AssetExecutionContext,
+    ingest_calendar: None,
+    daily_data_quality: None,
+    catalyst_models_refit: None,
+) -> MaterializeResult:
+    session_factory = get_sessionmaker()
+    with session_factory() as session:
+        written = run_daily_catalyst(session)
+        session.commit()
+    context.log.info(f"signals.catalyst.written={written}")
+    return MaterializeResult(metadata=_summarise(written))
+
+
 SIGNAL_ASSETS = [
     signal_trend,
     signal_carry,
@@ -262,4 +326,6 @@ SIGNAL_ASSETS = [
     signal_dislocation,
     factor_exposure_models_refit,
     signal_factor_exposure,
+    catalyst_models_refit,
+    signal_catalyst,
 ]

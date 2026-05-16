@@ -15,9 +15,11 @@ from orchestration.assets.ingest import (
 )
 from orchestration.assets.signals import (
     SIGNAL_ASSETS,
+    catalyst_models_refit,
     dislocation_models_refit,
     factor_exposure_models_refit,
     signal_carry,
+    signal_catalyst,
     signal_dislocation,
     signal_factor_exposure,
     signal_positioning,
@@ -39,6 +41,7 @@ __all__ = [
     "DATA_QUALITY_ASSETS",
     "INGEST_ASSETS",
     "SIGNAL_ASSETS",
+    "catalyst_models_refit",
     "daily_data_quality",
     "dislocation_models_refit",
     "factor_exposure_models_refit",
@@ -52,6 +55,7 @@ __all__ = [
     "ingest_yfinance_bars",
     "refresh_calendar_events",
     "signal_carry",
+    "signal_catalyst",
     "signal_dislocation",
     "signal_factor_exposure",
     "signal_positioning",

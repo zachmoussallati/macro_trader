@@ -371,6 +371,46 @@ def positioning_cot(
     ]
 
 
+class UpcomingCatalystOut(BaseModel):
+    """One upcoming-catalyst row for ``/signals/catalyst/events``."""
+
+    event_ts: datetime
+    subject: str
+    kind: str
+    importance: str
+    affected_instruments: list[str]
+
+
+@router.get("/catalyst/events", response_model=list[UpcomingCatalystOut])
+def catalyst_events(
+    session: SessionDep,
+    as_of: datetime | None = Query(default=None),
+    days_ahead: int = Query(default=10, ge=1, le=60),
+) -> list[UpcomingCatalystOut]:
+    """Upcoming events in the next ``days_ahead`` days that the catalyst
+    signal will fold into per-instrument forward scores."""
+    from macro_trader.calendar.api import events_in_window
+
+    target = as_of if as_of is not None else utcnow()
+    rows = events_in_window(
+        session,
+        start=target,
+        end=target + timedelta(days=days_ahead),
+        importance=["medium", "high"],
+        kinds=["data_release", "central_bank", "supply_event"],
+    )
+    return [
+        UpcomingCatalystOut(
+            event_ts=r.event_ts,
+            subject=r.subject,
+            kind=r.kind,
+            importance=r.importance,
+            affected_instruments=list(r.affected_instruments or []),
+        )
+        for r in rows
+    ]
+
+
 class FactorZScoreOut(BaseModel):
     """Latest factor z-scores for the heat-of-the-market view."""
 
