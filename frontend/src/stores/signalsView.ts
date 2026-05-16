@@ -19,6 +19,9 @@ export const ALL_COMPONENTS: ReadonlyArray<{ key: string; label: string }> = [
   { key: "dislocation_signal", label: "Dislocation" },
   { key: "factor_exposure_signal", label: "Factor exposure" },
   { key: "catalyst_signal", label: "Catalyst" },
+  { key: "vol_surface_signal", label: "Vol surface" },
+  { key: "nowcasting_signal", label: "Nowcasting" },
+  { key: "alt_data_signal", label: "Alt data" },
 ];
 
 interface SignalsViewState {

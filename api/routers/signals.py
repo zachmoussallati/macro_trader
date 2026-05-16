@@ -110,6 +110,9 @@ COMPONENTS_FOR_HEATMAP: tuple[str, ...] = (
     "dislocation_signal",
     "factor_exposure_signal",
     "catalyst_signal",
+    "vol_surface_signal",
+    "nowcasting_signal",
+    "alt_data_signal",
 )
 
 
