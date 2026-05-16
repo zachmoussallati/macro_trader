@@ -1005,6 +1005,369 @@ def dislocation_factors(
     return out
 
 
+# ----------------------------------------------------------------------
+# Stage 5 — vol surface / nowcasting / alt-data endpoints
+# ----------------------------------------------------------------------
+
+
+class VolSurfaceSlicePoint(BaseModel):
+    """One per-strike point inside a single expiry slice."""
+
+    strike: float
+    moneyness: float | None
+    implied_vol: float | None
+    option_type: str
+    delta: float | None
+    open_interest: int | None
+
+
+class VolSurfaceSlice(BaseModel):
+    """One expiry slice in the surface inspector."""
+
+    expiry_ts: datetime
+    dte: int
+    n_strikes: int
+    atm_iv: float | None
+    points: list[VolSurfaceSlicePoint]
+
+
+class VolSurfaceSlicesOut(BaseModel):
+    instrument_id: str
+    snapshot_ts: datetime
+    underlying_price: float | None
+    slices: list[VolSurfaceSlice]
+
+
+@router.get("/vol_surface/slices", response_model=VolSurfaceSlicesOut)
+def vol_surface_slices(
+    session: SessionDep,
+    instrument: str = Query(..., min_length=1, max_length=32),
+    as_of: datetime | None = Query(default=None),
+) -> VolSurfaceSlicesOut:
+    """Per-expiry slices of the latest options chain for an
+    instrument. Drives the vol_surface page's per-slice IV plots.
+
+    Reads from ``market_data.options_chains`` directly. ATM IV per
+    slice is the IV at the strike closest to spot.
+    """
+    from sqlalchemy import desc
+
+    from macro_trader.db.models.market_data import OptionsChain
+
+    target = as_of if as_of is not None else utcnow()
+    latest_ts = session.scalar(
+        select(func.max(OptionsChain.snapshot_ts))
+        .where(OptionsChain.instrument_id == instrument)
+        .where(OptionsChain.snapshot_ts <= target)
+    )
+    if latest_ts is None:
+        return VolSurfaceSlicesOut(
+            instrument_id=instrument,
+            snapshot_ts=target,
+            underlying_price=None,
+            slices=[],
+        )
+    rows = list(
+        session.scalars(
+            select(OptionsChain)
+            .where(OptionsChain.instrument_id == instrument)
+            .where(OptionsChain.snapshot_ts == latest_ts)
+            .order_by(OptionsChain.expiry_ts.asc(), desc(OptionsChain.strike))
+        )
+    )
+    if not rows:
+        return VolSurfaceSlicesOut(
+            instrument_id=instrument,
+            snapshot_ts=latest_ts,
+            underlying_price=None,
+            slices=[],
+        )
+    spot = next((r.underlying_price for r in rows if r.underlying_price), None)
+    spot_f = float(spot) if spot is not None else None
+
+    by_expiry: dict[datetime, list[OptionsChain]] = {}
+    for r in rows:
+        by_expiry.setdefault(r.expiry_ts, []).append(r)
+
+    slices: list[VolSurfaceSlice] = []
+    for expiry, slice_rows in sorted(by_expiry.items(), key=lambda kv: kv[0]):
+        dte = max(int((expiry - latest_ts).total_seconds() / 86400.0), 0)
+        atm_iv: float | None = None
+        if spot_f is not None and spot_f > 0:
+            call_rows = [
+                r for r in slice_rows if r.option_type == "call" and r.implied_vol
+            ]
+            if call_rows:
+                closest = min(
+                    call_rows, key=lambda r: abs(float(r.strike) - spot_f)
+                )
+                atm_iv = float(closest.implied_vol) if closest.implied_vol else None
+        slices.append(
+            VolSurfaceSlice(
+                expiry_ts=expiry,
+                dte=dte,
+                n_strikes=len(slice_rows),
+                atm_iv=atm_iv,
+                points=[
+                    VolSurfaceSlicePoint(
+                        strike=float(r.strike),
+                        moneyness=(float(r.strike) / spot_f - 1.0)
+                        if spot_f and spot_f > 0
+                        else None,
+                        implied_vol=_opt_float(r.implied_vol),
+                        option_type=r.option_type,
+                        delta=_opt_float(r.delta),
+                        open_interest=int(r.open_interest)
+                        if r.open_interest is not None
+                        else None,
+                    )
+                    for r in slice_rows
+                ],
+            )
+        )
+
+    return VolSurfaceSlicesOut(
+        instrument_id=instrument,
+        snapshot_ts=latest_ts,
+        underlying_price=spot_f,
+        slices=slices,
+    )
+
+
+class VolSurfaceTermStructurePoint(BaseModel):
+    expiry_ts: datetime
+    dte: int
+    atm_iv: float | None
+
+
+@router.get(
+    "/vol_surface/term_structure",
+    response_model=list[VolSurfaceTermStructurePoint],
+)
+def vol_surface_term_structure(
+    session: SessionDep,
+    instrument: str = Query(..., min_length=1, max_length=32),
+    as_of: datetime | None = Query(default=None),
+) -> list[VolSurfaceTermStructurePoint]:
+    """Term-structure view: ATM IV per expiry for the latest chain
+    snapshot. The vol_surface page's middle chart."""
+    full = vol_surface_slices(session, instrument=instrument, as_of=as_of)
+    return [
+        VolSurfaceTermStructurePoint(
+            expiry_ts=s.expiry_ts, dte=s.dte, atm_iv=s.atm_iv
+        )
+        for s in full.slices
+    ]
+
+
+class NowcastingProjectionOut(BaseModel):
+    """One per-release projection row."""
+
+    release_id: str
+    target_fred: str
+    name: str
+    method_id: str
+    pred_mean: float | None
+    pred_var: float | None
+    last_actual: float | None
+    surprise_z: float | None
+    affected_instruments: list[str]
+    fit_as_of: datetime | None
+
+
+@router.get(
+    "/nowcasting/projections", response_model=list[NowcastingProjectionOut]
+)
+def nowcasting_projections(
+    session: SessionDep,
+    method_id: str = Query(default="nowcasting.ols_ar.v1"),
+    as_of: datetime | None = Query(default=None),
+) -> list[NowcastingProjectionOut]:
+    """Latest per-release nowcast projections. Reads the fitted
+    state cached in ``system.methods_registry.serialized_blob`` (per
+    weekly refit asset) and surfaces each release's pred_mean +
+    pred_var + last_actual + standardised surprise.
+    """
+    if method_id not in ("nowcasting.ols_ar.v1", "nowcasting.bvar.v1"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unknown nowcasting method_id {method_id!r}",
+        )
+    from macro_trader.signals.nowcasting.refit import (
+        load_bvar_state,
+        load_ols_ar_state,
+    )
+    from macro_trader.signals.nowcasting.releases import DEFAULT_RELEASES
+
+    method = (
+        load_ols_ar_state(session)
+        if method_id == "nowcasting.ols_ar.v1"
+        else load_bvar_state(session)
+    )
+    if method is None or method._state is None:
+        return []
+
+    state = method._state
+    fit_as_of = (
+        datetime.fromisoformat(state["fit_as_of"])
+        if state.get("fit_as_of")
+        else None
+    )
+    per_release: dict[str, dict[str, Any]] = state["per_release"]
+    spec_by_id = {r.release_id: r for r in DEFAULT_RELEASES}
+
+    out: list[NowcastingProjectionOut] = []
+    for release_id, fit in per_release.items():
+        spec = spec_by_id.get(release_id)
+        if spec is None:
+            continue
+        pred = _opt_float(fit.get("pred_mean"))
+        last = _opt_float(fit.get("last_actual"))
+        pred_var = _opt_float(fit.get("pred_var"))
+        surprise_z: float | None = None
+        if pred is not None and last is not None:
+            denom = (pred_var or (abs(last) * 0.05 or 1e-6)) ** 0.5
+            surprise_z = max(min((pred - last) / denom, 3.0), -3.0)
+        out.append(
+            NowcastingProjectionOut(
+                release_id=release_id,
+                target_fred=spec.target_fred,
+                name=spec.name,
+                method_id=method_id,
+                pred_mean=pred,
+                pred_var=pred_var,
+                last_actual=last,
+                surprise_z=surprise_z,
+                affected_instruments=list(spec.affected_instruments),
+                fit_as_of=fit_as_of,
+            )
+        )
+    return out
+
+
+class NowcastingHistoryPoint(BaseModel):
+    """One observation in the historical nowcast vs actual series."""
+
+    value_ts: datetime
+    actual: float | None
+
+
+@router.get(
+    "/nowcasting/history", response_model=list[NowcastingHistoryPoint]
+)
+def nowcasting_history(
+    session: SessionDep,
+    release: str = Query(..., min_length=1, max_length=32),
+    from_: datetime | None = Query(default=None, alias="from"),
+    to: datetime | None = Query(default=None),
+) -> list[NowcastingHistoryPoint]:
+    """Historical release values for one release. The vol-surface
+    page's "nowcast vs actual" chart uses this together with
+    nowcasting/projections for the latest forecast.
+
+    Stage 5 ships only the actual-release series (no historical
+    nowcast persistence yet); future stages can persist daily
+    nowcasts to add the nowcast line.
+    """
+    from macro_trader.data.loaders import load_macro_series
+    from macro_trader.signals.nowcasting.releases import DEFAULT_RELEASES
+
+    spec = next((r for r in DEFAULT_RELEASES if r.release_id == release), None)
+    if spec is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unknown release {release!r}",
+        )
+    target_to = to if to is not None else utcnow()
+    target_from = from_ if from_ is not None else (
+        target_to - timedelta(days=int(spec.frequency != "weekly") * 5 * 365)
+    )
+    series = load_macro_series(
+        session,
+        spec.target_fred,
+        start=target_from,
+        end=target_to,
+        as_of=target_to,
+    )
+    return [
+        NowcastingHistoryPoint(value_ts=ts, actual=float(v))
+        for ts, v in series.items()
+        if v is not None
+    ]
+
+
+class AltDataComponentRow(BaseModel):
+    """Per-instrument breakdown by alt-data sub-signal."""
+
+    instrument_id: str
+    method_id: str
+    raw_value: float | None
+    confidence: float | None
+    covered: bool
+    extras: dict[str, Any]
+
+
+@router.get(
+    "/alt_data/components", response_model=list[AltDataComponentRow]
+)
+def alt_data_components(
+    session: SessionDep,
+    as_of: datetime | None = Query(default=None),
+) -> list[AltDataComponentRow]:
+    """Per-instrument breakdown of each alt-data sub-signal's
+    latest raw_value + confidence + covered-flag. Drives the
+    alt_data dashboard page's stacked view."""
+    target = as_of if as_of is not None else utcnow()
+    method_ids = (
+        "alt_data.eia_storage.v1",
+        "alt_data.usda_wasde.v1",
+        "alt_data.google_trends.v1",
+    )
+    out: list[AltDataComponentRow] = []
+    for method_id in method_ids:
+        subq = (
+            select(
+                SignalValue.instrument_id.label("inst"),
+                func.max(SignalValue.value_ts).label("max_value_ts"),
+            )
+            .where(SignalValue.signal_id == method_id)
+            .where(SignalValue.observation_ts <= target)
+            .group_by(SignalValue.instrument_id)
+            .subquery()
+        )
+        stmt = (
+            select(SignalValue)
+            .join(
+                subq,
+                and_(
+                    SignalValue.instrument_id == subq.c.inst,
+                    SignalValue.value_ts == subq.c.max_value_ts,
+                    SignalValue.signal_id == method_id,
+                ),
+            )
+            .where(SignalValue.observation_ts <= target)
+        )
+        for r in session.scalars(stmt):
+            meta = r.signal_metadata if isinstance(r.signal_metadata, dict) else {}
+            covered = bool(meta.get("covered", True))
+            extras: dict[str, Any] = {
+                k: v
+                for k, v in meta.items()
+                if k not in {"covered", "method_id"}
+            }
+            out.append(
+                AltDataComponentRow(
+                    instrument_id=r.instrument_id,
+                    method_id=method_id,
+                    raw_value=_opt_float(r.raw_value),
+                    confidence=_opt_float(r.confidence),
+                    covered=covered,
+                    extras=extras,
+                )
+            )
+    return out
+
+
 class DecayPointOut(BaseModel):
     value_ts: datetime
     rolling_sharpe_252: float | None

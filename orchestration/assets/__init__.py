@@ -10,6 +10,7 @@ from orchestration.assets.ingest import (
     ingest_fred_series,
     ingest_google_trends,
     ingest_noaa_weather,
+    ingest_options_chains,
     ingest_usda,
     ingest_yfinance_bars,
 )
@@ -55,6 +56,7 @@ __all__ = [
     "ingest_fred_series",
     "ingest_google_trends",
     "ingest_noaa_weather",
+    "ingest_options_chains",
     "ingest_usda",
     "ingest_yfinance_bars",
     "nowcasting_models_refit",

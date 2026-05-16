@@ -419,11 +419,13 @@ def signal_nowcasting(
         "options data lands."
     ),
     ins={
+        "ingest_options_chains": AssetIn(key="ingest_options_chains"),
         "daily_data_quality": AssetIn(key="daily_data_quality"),
     },
 )
 def signal_vol_surface(
     context: AssetExecutionContext,
+    ingest_options_chains: None,
     daily_data_quality: None,
 ) -> MaterializeResult:
     session_factory = get_sessionmaker()

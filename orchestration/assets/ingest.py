@@ -10,6 +10,8 @@ Calendar refresh and the daily data-quality job are separate assets in
 
 from __future__ import annotations
 
+from datetime import UTC
+
 from dagster import (
     AssetExecutionContext,
     AutoMaterializePolicy,
@@ -124,6 +126,110 @@ def ingest_google_trends(context: AssetExecutionContext) -> MaterializeResult:
     return _run_ingester(GoogleTrendsIngester, context)
 
 
+# ----------------------------------------------------------------------
+# Vol surface — Stage 5 options-chain ingest
+# ----------------------------------------------------------------------
+@asset(
+    group_name="ingest_market_data",
+    description=(
+        "yfinance options-chain snapshots for the vol_surface universe "
+        "(GLD/SLV/USO/UNG/DBA/SPY). Source-agnostic: swap "
+        "YfinanceOptionsIngester for a paid-source ingester via the "
+        "OptionsChainIngester ABC and this asset reuses unchanged. "
+        "Idempotent UPSERT via on_conflict_do_nothing on the natural PK."
+    ),
+    auto_materialize_policy=AutoMaterializePolicy.eager(),
+)
+def ingest_options_chains(context: AssetExecutionContext) -> MaterializeResult:
+    from datetime import datetime
+
+    from sqlalchemy import select
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from macro_trader.db.models.market_data import Instrument, OptionsChain
+    from macro_trader.signals.vol_surface.ingestion.yfinance import (
+        YfinanceOptionsIngester,
+    )
+    from macro_trader.signals.vol_surface.methods import VOL_SURFACE_UNIVERSE
+
+    ingester = YfinanceOptionsIngester()
+    session_factory = get_sessionmaker()
+    now = datetime.now(UTC)
+    rows_per_instrument: dict[str, int] = {}
+    rows_total = 0
+    with session_factory() as session:
+        instruments = list(
+            session.scalars(
+                select(Instrument)
+                .where(Instrument.is_active.is_(True))
+                .where(Instrument.proxy_ticker.is_not(None))
+            )
+        )
+        for inst in instruments:
+            if inst.proxy_ticker not in VOL_SURFACE_UNIVERSE:
+                continue
+            try:
+                chain_rows = ingester.fetch_chain(
+                    inst.instrument_id,
+                    proxy_ticker=inst.proxy_ticker,
+                    now=now,
+                )
+            except Exception as exc:  # pragma: no cover - yfinance flake
+                context.log.warning(
+                    f"vol_surface.ingest_chain.failed instrument={inst.instrument_id}"
+                    f" ticker={inst.proxy_ticker} error={exc}"
+                )
+                continue
+            if not chain_rows:
+                continue
+            payload = [
+                {
+                    "instrument_id": r.instrument_id,
+                    "snapshot_ts": r.snapshot_ts,
+                    "expiry_ts": r.expiry_ts,
+                    "strike": r.strike,
+                    "option_type": r.option_type,
+                    "bid": r.bid,
+                    "ask": r.ask,
+                    "last": r.last,
+                    "volume": r.volume,
+                    "open_interest": r.open_interest,
+                    "implied_vol": r.implied_vol,
+                    "delta": r.delta,
+                    "gamma": r.gamma,
+                    "vega": r.vega,
+                    "theta": r.theta,
+                    "underlying_price": r.underlying_price,
+                    "source": r.source,
+                }
+                for r in chain_rows
+            ]
+            stmt = pg_insert(OptionsChain).values(payload)
+            stmt = stmt.on_conflict_do_nothing(
+                index_elements=[
+                    "instrument_id",
+                    "snapshot_ts",
+                    "expiry_ts",
+                    "strike",
+                    "option_type",
+                ]
+            )
+            result = session.execute(stmt)
+            inserted = int(result.rowcount or 0)
+            rows_per_instrument[inst.instrument_id] = inserted
+            rows_total += inserted
+        session.commit()
+
+    context.log.info(f"vol_surface.ingest_chains rows={rows_per_instrument}")
+    return MaterializeResult(
+        metadata={
+            "rows_ingested": MetadataValue.int(rows_total),
+            "per_instrument": MetadataValue.json(rows_per_instrument),
+            "source_id": MetadataValue.text(ingester.source),
+        }
+    )
+
+
 INGEST_ASSETS = [
     ingest_yfinance_bars,
     ingest_fred_series,
@@ -132,4 +238,5 @@ INGEST_ASSETS = [
     ingest_usda,
     ingest_noaa_weather,
     ingest_google_trends,
+    ingest_options_chains,
 ]

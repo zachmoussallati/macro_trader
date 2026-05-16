@@ -6,10 +6,13 @@ import Home from "@/pages/Home";
 import Login from "@/pages/Login";
 import Methods from "@/pages/Methods";
 import Signals from "@/pages/Signals";
+import SignalsAltData from "@/pages/SignalsAltData";
 import SignalsCatalyst from "@/pages/SignalsCatalyst";
 import SignalsDislocation from "@/pages/SignalsDislocation";
 import SignalsFactorExposure from "@/pages/SignalsFactorExposure";
+import SignalsNowcasting from "@/pages/SignalsNowcasting";
 import SignalsPositioning from "@/pages/SignalsPositioning";
+import SignalsVolSurface from "@/pages/SignalsVolSurface";
 import { useAuthStore } from "@/stores/auth";
 
 const queryClient = new QueryClient({
@@ -90,6 +93,30 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <SignalsCatalyst />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/signals/vol_surface"
+            element={
+              <ProtectedRoute>
+                <SignalsVolSurface />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/signals/nowcasting"
+            element={
+              <ProtectedRoute>
+                <SignalsNowcasting />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/signals/alt_data"
+            element={
+              <ProtectedRoute>
+                <SignalsAltData />
               </ProtectedRoute>
             }
           />

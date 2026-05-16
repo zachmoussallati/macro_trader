@@ -90,6 +90,24 @@ export default function Signals() {
         >
           Catalyst →
         </Link>
+        <Link
+          to="/signals/vol_surface"
+          className="rounded border px-2 py-1 hover:bg-accent"
+        >
+          Vol surface →
+        </Link>
+        <Link
+          to="/signals/nowcasting"
+          className="rounded border px-2 py-1 hover:bg-accent"
+        >
+          Nowcasting →
+        </Link>
+        <Link
+          to="/signals/alt_data"
+          className="rounded border px-2 py-1 hover:bg-accent"
+        >
+          Alt data →
+        </Link>
       </nav>
 
       {tab === "heatmap" && <HeatmapTab />}

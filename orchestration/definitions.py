@@ -34,6 +34,7 @@ from orchestration.assets import (
     ingest_fred_series,
     ingest_google_trends,
     ingest_noaa_weather,
+    ingest_options_chains,
     ingest_usda,
     ingest_yfinance_bars,
     nowcasting_models_refit,
@@ -80,6 +81,16 @@ ingest_market_data_job = define_asset_job(
     description="Daily ETF daily-bar ingest.",
 )
 
+ingest_options_chains_job = define_asset_job(
+    name="ingest_options_chains_job",
+    selection=AssetSelection.assets(ingest_options_chains),
+    description=(
+        "Daily yfinance options-chain snapshots for the vol_surface "
+        "universe (21:30 UTC, after US equity options close at 20:00 "
+        "UTC post-DST)."
+    ),
+)
+
 ingest_macro_data_job = define_asset_job(
     name="ingest_macro_data_job",
     selection=AssetSelection.assets(ingest_fred_series),
@@ -116,6 +127,7 @@ ingest_all_job = define_asset_job(
         ingest_usda,
         ingest_noaa_weather,
         ingest_google_trends,
+        ingest_options_chains,
         refresh_calendar_events,
     ),
     description="One-shot job to run every ingester (used for manual backfills).",
@@ -194,6 +206,16 @@ SCHEDULES = [
         cron_schedule="0 22 * * *",
         job=ingest_market_data_job,
         execution_timezone="UTC",
+    ),
+    ScheduleDefinition(
+        name="ingest_options_chains_daily_2130_utc",
+        cron_schedule="30 21 * * *",
+        job=ingest_options_chains_job,
+        execution_timezone="UTC",
+        description=(
+            "Daily yfinance options-chain snapshots (after US equity "
+            "options close at 20:00 UTC post-DST)."
+        ),
     ),
     ScheduleDefinition(
         name="ingest_macro_data_daily_13_utc",
@@ -280,6 +302,7 @@ defs = Definitions(
         ingest_alt_data_job,
         ingest_calendar_job,
         ingest_all_job,
+        ingest_options_chains_job,
         data_quality_job,
         compute_all_signals_job,
         dislocation_refit_job,

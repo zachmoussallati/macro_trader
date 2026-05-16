@@ -328,6 +328,64 @@ export interface CatalystPressure {
   value_ts: string | null;
 }
 
+// Stage 5 follow-up: vol_surface / nowcasting / alt_data endpoints
+export interface VolSurfaceSlicePoint {
+  strike: number;
+  moneyness: number | null;
+  implied_vol: number | null;
+  option_type: string;
+  delta: number | null;
+  open_interest: number | null;
+}
+
+export interface VolSurfaceSlice {
+  expiry_ts: string;
+  dte: number;
+  n_strikes: number;
+  atm_iv: number | null;
+  points: VolSurfaceSlicePoint[];
+}
+
+export interface VolSurfaceSlices {
+  instrument_id: string;
+  snapshot_ts: string;
+  underlying_price: number | null;
+  slices: VolSurfaceSlice[];
+}
+
+export interface VolSurfaceTermStructurePoint {
+  expiry_ts: string;
+  dte: number;
+  atm_iv: number | null;
+}
+
+export interface NowcastingProjection {
+  release_id: string;
+  target_fred: string;
+  name: string;
+  method_id: string;
+  pred_mean: number | null;
+  pred_var: number | null;
+  last_actual: number | null;
+  surprise_z: number | null;
+  affected_instruments: string[];
+  fit_as_of: string | null;
+}
+
+export interface NowcastingHistoryPoint {
+  value_ts: string;
+  actual: number | null;
+}
+
+export interface AltDataComponent {
+  instrument_id: string;
+  method_id: string;
+  raw_value: number | null;
+  confidence: number | null;
+  covered: boolean;
+  extras: Record<string, unknown>;
+}
+
 export const apiMethods = {
   // ----- core -----
   health: () => api.get<HealthResponse>("/health"),
@@ -466,4 +524,35 @@ export const apiMethods = {
     api.get<CatalystPressure[]>(
       `/signals/catalyst/pressure?method_id=${encodeURIComponent(method_id)}`,
     ),
+
+  // ----- vol_surface (Stage 5) -----
+  volSurfaceSlices: (instrument: string, as_of?: string) => {
+    const q = new URLSearchParams({ instrument });
+    if (as_of) q.set("as_of", as_of);
+    return api.get<VolSurfaceSlices>(`/signals/vol_surface/slices?${q.toString()}`);
+  },
+  volSurfaceTermStructure: (instrument: string, as_of?: string) => {
+    const q = new URLSearchParams({ instrument });
+    if (as_of) q.set("as_of", as_of);
+    return api.get<VolSurfaceTermStructurePoint[]>(
+      `/signals/vol_surface/term_structure?${q.toString()}`,
+    );
+  },
+
+  // ----- nowcasting (Stage 5) -----
+  nowcastingProjections: (method_id = "nowcasting.ols_ar.v1") =>
+    api.get<NowcastingProjection[]>(
+      `/signals/nowcasting/projections?method_id=${encodeURIComponent(method_id)}`,
+    ),
+  nowcastingHistory: (release: string, params: { from?: string; to?: string } = {}) => {
+    const q = new URLSearchParams({ release });
+    if (params.from) q.set("from", params.from);
+    if (params.to) q.set("to", params.to);
+    return api.get<NowcastingHistoryPoint[]>(
+      `/signals/nowcasting/history?${q.toString()}`,
+    );
+  },
+
+  // ----- alt_data (Stage 5) -----
+  altDataComponents: () => api.get<AltDataComponent[]>("/signals/alt_data/components"),
 };

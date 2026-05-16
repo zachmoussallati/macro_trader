@@ -138,3 +138,45 @@ already handles it
   Integration coverage for the three new families (full pipeline
   through `signal_values`) is queued as Stage 6 housekeeping in
   `next.md`.
+
+## 10. Stage 5 follow-up: closed deferrals in the same session
+
+After the initial Stage 5 tag, the same `clean_branch` gained
+three commits closing the biggest deferrals:
+
+- **5 new API endpoints** (`/signals/vol_surface/slices`,
+  `/term_structure`, `/nowcasting/projections`,
+  `/nowcasting/history`, `/alt_data/components`). Same Pydantic-
+  out-model + SignalValue query pattern as Stage 4C's endpoints.
+- **`ingest_options_chains` Dagster asset** (group
+  `ingest_market_data`, daily 21:30 UTC schedule per the prompt).
+  Auto-materialize eager so it triggers when its yfinance
+  dependency invalidates. `signal_vol_surface` gains an
+  `AssetIn(key="ingest_options_chains")` dependency. New
+  `ingest_options_chains_job` for ad-hoc reruns.
+- **3 frontend pages**: `/signals/vol_surface` (instrument
+  selector + term-structure chart + per-slice table — Plotly 3D
+  surface still deferred per §11 below), `/signals/nowcasting`
+  (per-release projections table + history chart), and
+  `/signals/alt_data` (per-instrument-by-method breakdown table).
+  Each follows the Stage 4C `SignalsPositioning` pattern
+  (TanStack Query + Recharts + Card/Table primitives).
+- Routing in `App.tsx` + the "Drill in:" nav row in
+  `/signals/Signals.tsx` extended to the 3 new pages.
+- **Vitest smoke tests** (3 new files, mirror existing pattern):
+  header renders; method selectors present; empty-state UI
+  displays when the mocked API returns `[]`.
+
+## 11. Plotly 3D surface viz still deferred
+
+- **What**: the Stage 5 prompt asks for a 3D surface plot on
+  `/signals/vol_surface`. The follow-up ships a 2D term-structure
+  chart + per-slice table — the same Recharts pattern the rest of
+  the dashboard uses.
+- **Why deferred even after the follow-up**: 3D requires Plotly
+  integration which is the only place across all 10 frontend
+  pages that diverges from the Recharts-only chart-library
+  policy (`notes/stage_4c/decisions.md` §2). Adding it for one
+  page creates a precedent we don't currently want to manage.
+  Revisit after the paid options data lands (deeper strikes /
+  expiries make the 3D viz actually useful).

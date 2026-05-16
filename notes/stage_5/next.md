@@ -34,13 +34,14 @@ Three small items inherited from Stage 5's deferrals:
   Stage 5 alembic 0004 migration runs cleanly and the three new
   families produce rows through the runner pipeline.
 
-### 6.2 Wire options-chain ingestion as a Dagster asset
+### 6.2 Wire options-chain ingestion as a Dagster asset — DONE in follow-up
 
-Stage 5 ships the `YfinanceOptionsIngester` but not a Dagster
-asset to run it. Stage 6 adds `ingest_options_chains` (daily,
-21:30 UTC after US equity options close at 20:00 UTC after DST)
-upstream of `signal_vol_surface`. Until this lands the
-vol-surface comparator has no data to compare on.
+The follow-up commits after the `stage-5-complete-signal-stack`
+tag added `ingest_options_chains` (group `ingest_market_data`,
+daily 21:30 UTC schedule). `signal_vol_surface` now takes an
+`AssetIn(key="ingest_options_chains")` so the chain ingest is
+upstream of the daily signal. Operators can also run the new
+`ingest_options_chains_job` for one-off backfills.
 
 ### 6.3 Add nowcasting consensus values to calendar ingest
 
@@ -100,16 +101,20 @@ requires Stage 9 backtester results.
 3. **Regime detection lag**: HMM smoothing vs filtering for
    real-time use. Real-time = filtering only.
 
-## Stage 5 deferrals to revisit during Stage 6 (or as a Stage 5B
-follow-up)
+## Stage 5 deferrals to revisit during Stage 6
 
-- Frontend pages for vol_surface (with Plotly 3D), nowcasting,
-  alt_data. Backend APIs for these pages are in
-  `tradeoffs.md` §9.
-- API endpoints listed in the Stage 5 prompt's "API Additions"
-  block. The heatmap already auto-includes the new components
-  via the existing endpoint.
-- Full Gatheral SVI (post-paid-data, per `tradeoffs.md` §2).
+- Frontend pages for vol_surface, nowcasting, alt_data: **DONE
+  in follow-up** (basic Recharts + table versions). Plotly 3D
+  surface viz on `/signals/vol_surface` is still deferred per
+  `notes/stage_5/decisions.md` §11.
+- 5 API endpoints listed in the Stage 5 prompt's "API Additions"
+  block: **DONE in follow-up**
+  (`/vol_surface/slices`, `/vol_surface/term_structure`,
+  `/nowcasting/projections`, `/nowcasting/history`,
+  `/alt_data/components`).
+- `ingest_options_chains` Dagster asset: **DONE in follow-up**.
+- Full Gatheral SVI (post-paid-data, per `tradeoffs.md` §2): still
+  deferred. Spline fallback continues to ship for Stage 5/6.
 
 ## What might still change in Stage 6+
 
