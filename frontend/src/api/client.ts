@@ -212,6 +212,108 @@ export interface DecayPoint {
   rolling_sharpe_252: number | null;
 }
 
+// ---------------- Stage 4A/4B/4C: per-component shapes ----------------
+export interface PositioningCotPoint {
+  report_ts: string;
+  publication_ts: string;
+  report_type: string;
+  open_interest: number | null;
+  managed_money_long: number | null;
+  managed_money_short: number | null;
+  managed_money_net: number | null;
+  producer_long: number | null;
+  producer_short: number | null;
+  producer_net: number | null;
+  swap_long: number | null;
+  swap_short: number | null;
+  nonreportable_long: number | null;
+  nonreportable_short: number | null;
+}
+
+export interface PositioningBreakdownPoint {
+  report_ts: string;
+  publication_ts: string;
+  long: number | null;
+  short: number | null;
+  net: number | null;
+  open_interest: number | null;
+  raw_value: number | null;
+  zscore: number | null;
+  confidence: number | null;
+}
+
+export interface DislocationFactor {
+  instrument_id: string;
+  method_id: string;
+  value_ts: string;
+  raw_value: number | null;
+  zscore: number | null;
+  rank: number | null;
+  confidence: number | null;
+  explained_variance: number | null;
+}
+
+export interface DislocationExplainedVariancePoint {
+  value_ts: string;
+  explained_variance: number | null;
+}
+
+export interface FactorZScore {
+  factor_name: string;
+  zscore: number | null;
+  fred_series: string;
+}
+
+export interface FactorExposureLoading {
+  instrument_id: string;
+  method_id: string;
+  factor_loadings: Record<string, number>;
+  raw_value: number | null;
+  rank: number | null;
+  confidence: number | null;
+  value_ts: string;
+}
+
+export interface FactorContributionRow {
+  factor_name: string;
+  loading: number;
+  zscore: number | null;
+  contribution: number;
+}
+
+export interface FactorContributions {
+  instrument_id: string;
+  method_id: string;
+  raw_value: number | null;
+  sum_contributions: number;
+  contributions: FactorContributionRow[];
+}
+
+export interface UpcomingCatalyst {
+  event_ts: string;
+  subject: string;
+  kind: string;
+  importance: string;
+  affected_instruments: string[];
+}
+
+export interface CatalystHistorical {
+  event_ts: string;
+  subject: string;
+  log_return: number;
+  abs_return: number;
+}
+
+export interface CatalystPressure {
+  instrument_id: string;
+  pressure_score: number | null;
+  n_subjects: number;
+  raw_value: number | null;
+  rank: number | null;
+  confidence: number | null;
+  value_ts: string | null;
+}
+
 export const apiMethods = {
   // ----- core -----
   health: () => api.get<HealthResponse>("/health"),
@@ -270,5 +372,84 @@ export const apiMethods = {
   signalComparisons: (component?: string) =>
     api.get<unknown[]>(
       `/signals/comparisons${component ? `?component=${encodeURIComponent(component)}` : ""}`,
+    ),
+
+  // ----- positioning (Stage 4A + 4C) -----
+  positioningCot: (
+    instrument: string,
+    params: { report_type?: string; lookback_weeks?: number } = {},
+  ) => {
+    const q = new URLSearchParams({ instrument });
+    if (params.report_type) q.set("report_type", params.report_type);
+    if (params.lookback_weeks) q.set("lookback_weeks", String(params.lookback_weeks));
+    return api.get<PositioningCotPoint[]>(`/signals/positioning/cot?${q.toString()}`);
+  },
+  positioningBreakdown: (
+    instrument_id: string,
+    params: { method_id?: string; lookback_weeks?: number } = {},
+  ) => {
+    const q = new URLSearchParams({ instrument_id });
+    if (params.method_id) q.set("method_id", params.method_id);
+    if (params.lookback_weeks) q.set("lookback_weeks", String(params.lookback_weeks));
+    return api.get<PositioningBreakdownPoint[]>(
+      `/signals/positioning/breakdown?${q.toString()}`,
+    );
+  },
+
+  // ----- dislocation (Stage 4A + 4C) -----
+  dislocationFactors: (method_id = "dislocation.pca.v1") =>
+    api.get<DislocationFactor[]>(
+      `/signals/dislocation/factors?method_id=${encodeURIComponent(method_id)}`,
+    ),
+  dislocationExplainedVariance: (
+    method_id = "dislocation.pca.v1",
+    params: { from?: string; to?: string } = {},
+  ) => {
+    const q = new URLSearchParams({ method_id });
+    if (params.from) q.set("from", params.from);
+    if (params.to) q.set("to", params.to);
+    return api.get<DislocationExplainedVariancePoint[]>(
+      `/signals/dislocation/explained_variance?${q.toString()}`,
+    );
+  },
+
+  // ----- factor exposure (Stage 4B + 4C) -----
+  factorExposureFactors: () =>
+    api.get<FactorZScore[]>("/signals/factor_exposure/factors"),
+  factorExposureLoadings: (method_id = "factor_exposure.ols.v1") =>
+    api.get<FactorExposureLoading[]>(
+      `/signals/factor_exposure/loadings?method_id=${encodeURIComponent(method_id)}`,
+    ),
+  factorExposureContributions: (
+    instrument_id: string,
+    method_id = "factor_exposure.ols.v1",
+  ) => {
+    const q = new URLSearchParams({ instrument_id, method_id });
+    return api.get<FactorContributions>(
+      `/signals/factor_exposure/contributions?${q.toString()}`,
+    );
+  },
+
+  // ----- catalyst (Stage 4B + 4C) -----
+  catalystEvents: (params: { days_ahead?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.days_ahead) q.set("days_ahead", String(params.days_ahead));
+    return api.get<UpcomingCatalyst[]>(`/signals/catalyst/events?${q.toString()}`);
+  },
+  catalystHistorical: (
+    instrument_id: string,
+    params: { event_subject?: string; lookback_years?: number } = {},
+  ) => {
+    const q = new URLSearchParams({ instrument_id });
+    if (params.event_subject) q.set("event_subject", params.event_subject);
+    if (params.lookback_years)
+      q.set("lookback_years", String(params.lookback_years));
+    return api.get<CatalystHistorical[]>(
+      `/signals/catalyst/historical?${q.toString()}`,
+    );
+  },
+  catalystPressure: (method_id = "catalyst.event_study.v1") =>
+    api.get<CatalystPressure[]>(
+      `/signals/catalyst/pressure?method_id=${encodeURIComponent(method_id)}`,
     ),
 };

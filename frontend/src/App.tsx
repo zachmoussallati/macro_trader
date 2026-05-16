@@ -6,6 +6,10 @@ import Home from "@/pages/Home";
 import Login from "@/pages/Login";
 import Methods from "@/pages/Methods";
 import Signals from "@/pages/Signals";
+import SignalsCatalyst from "@/pages/SignalsCatalyst";
+import SignalsDislocation from "@/pages/SignalsDislocation";
+import SignalsFactorExposure from "@/pages/SignalsFactorExposure";
+import SignalsPositioning from "@/pages/SignalsPositioning";
 import { useAuthStore } from "@/stores/auth";
 
 const queryClient = new QueryClient({
@@ -54,6 +58,38 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <Signals />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/signals/positioning"
+            element={
+              <ProtectedRoute>
+                <SignalsPositioning />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/signals/dislocation"
+            element={
+              <ProtectedRoute>
+                <SignalsDislocation />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/signals/factor_exposure"
+            element={
+              <ProtectedRoute>
+                <SignalsFactorExposure />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/signals/catalyst"
+            element={
+              <ProtectedRoute>
+                <SignalsCatalyst />
               </ProtectedRoute>
             }
           />

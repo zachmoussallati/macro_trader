@@ -411,6 +411,395 @@ def catalyst_events(
     ]
 
 
+# ----------------------------------------------------------------------
+# Stage 4C additions
+# ----------------------------------------------------------------------
+
+
+class CatalystHistoricalOut(BaseModel):
+    """One historical event-by-event observation for the catalyst page."""
+
+    event_ts: datetime
+    subject: str
+    log_return: float
+    abs_return: float
+
+
+@router.get("/catalyst/historical", response_model=list[CatalystHistoricalOut])
+def catalyst_historical(
+    session: SessionDep,
+    instrument_id: str = Query(..., min_length=1, max_length=32),
+    event_subject: str | None = Query(default=None),
+    lookback_years: int = Query(default=5, ge=1, le=20),
+) -> list[CatalystHistoricalOut]:
+    """Per-event historical returns around catalyst events for an
+    (instrument, event_subject) pair (or every subject when omitted).
+
+    Drives the catalyst page's "historical sensitivity" detail table:
+    the user clicks an instrument in the catalyst pressure bar chart
+    and sees the event-by-event returns that drive its forward score.
+    """
+    from macro_trader.signals.catalyst.events import (
+        DEFAULT_EVENT_KINDS,
+        DEFAULT_IMPORTANCE,
+        historical_event_returns,
+    )
+
+    historicals = historical_event_returns(
+        session,
+        instrument_ids=[instrument_id],
+        as_of=utcnow(),
+        lookback_years=lookback_years,
+        kinds=DEFAULT_EVENT_KINDS,
+        importance=DEFAULT_IMPORTANCE,
+    )
+    out = [
+        CatalystHistoricalOut(
+            event_ts=h.event_ts,
+            subject=h.subject,
+            log_return=float(h.log_return),
+            abs_return=abs(float(h.log_return)),
+        )
+        for h in historicals
+        if event_subject is None or h.subject == event_subject
+    ]
+    out.sort(key=lambda r: r.event_ts)
+    return out
+
+
+class CatalystPressureOut(BaseModel):
+    """Per-instrument forward catalyst pressure score."""
+
+    instrument_id: str
+    pressure_score: float | None
+    n_subjects: int
+    raw_value: float | None
+    rank: float | None
+    confidence: float | None
+    value_ts: datetime | None
+
+
+@router.get("/catalyst/pressure", response_model=list[CatalystPressureOut])
+def catalyst_pressure(
+    session: SessionDep,
+    as_of: datetime | None = Query(default=None),
+    method_id: str = Query(default="catalyst.event_study.v1"),
+) -> list[CatalystPressureOut]:
+    """Per-instrument forward catalyst pressure (latest signal_value
+    snapshot for the chosen catalyst method).
+
+    Drives the catalyst page's bar chart sorted by pressure magnitude.
+    """
+    if method_id not in ("catalyst.event_study.v1", "catalyst.causal.v1"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unknown catalyst method_id {method_id!r}",
+        )
+    target = as_of if as_of is not None else utcnow()
+    subq = (
+        select(
+            SignalValue.instrument_id.label("inst"),
+            func.max(SignalValue.value_ts).label("max_value_ts"),
+        )
+        .where(SignalValue.signal_id == method_id)
+        .where(SignalValue.observation_ts <= target)
+        .group_by(SignalValue.instrument_id)
+        .subquery()
+    )
+    stmt = (
+        select(SignalValue)
+        .join(
+            subq,
+            and_(
+                SignalValue.instrument_id == subq.c.inst,
+                SignalValue.value_ts == subq.c.max_value_ts,
+                SignalValue.signal_id == method_id,
+            ),
+        )
+        .where(SignalValue.observation_ts <= target)
+    )
+    rows = list(session.scalars(stmt))
+    out: list[CatalystPressureOut] = []
+    for r in rows:
+        meta = r.signal_metadata or {}
+        n_subjects = 0
+        if isinstance(meta, dict):
+            n_subjects = int(meta.get("n_subjects", 0) or 0)
+        out.append(
+            CatalystPressureOut(
+                instrument_id=r.instrument_id,
+                pressure_score=_opt_float(r.zscore),  # pre-tanh forward score
+                n_subjects=n_subjects,
+                raw_value=_opt_float(r.raw_value),
+                rank=_opt_float(r.rank),
+                confidence=_opt_float(r.confidence),
+                value_ts=r.value_ts,
+            )
+        )
+    out.sort(
+        key=lambda x: abs(x.pressure_score) if x.pressure_score is not None else 0.0,
+        reverse=True,
+    )
+    return out
+
+
+class PositioningBreakdownPoint(BaseModel):
+    """One time-step in the positioning breakdown chart."""
+
+    report_ts: datetime
+    publication_ts: datetime
+    long: float | None
+    short: float | None
+    net: float | None
+    open_interest: float | None
+    raw_value: float | None
+    zscore: float | None
+    confidence: float | None
+
+
+@router.get(
+    "/positioning/breakdown", response_model=list[PositioningBreakdownPoint]
+)
+def positioning_breakdown(
+    session: SessionDep,
+    instrument_id: str = Query(..., min_length=1, max_length=32),
+    method_id: str = Query(default="positioning.cot_zscore.v1"),
+    as_of: datetime | None = Query(default=None),
+    lookback_weeks: int = Query(default=156, ge=1, le=520),
+) -> list[PositioningBreakdownPoint]:
+    """Time series of COT positioning breakdown joined with the
+    computed signal values for the chosen method.
+
+    For ``positioning.cot_zscore.v1`` we read managed-money long /
+    short / net from the disaggregated report; for
+    ``positioning.cot_commercial.v1`` we read producer (commercial)
+    long / short / net from the legacy report. Signal values join in
+    on the matching ``value_ts``.
+    """
+    if method_id == "positioning.cot_zscore.v1":
+        report_type = "disaggregated"
+        long_attr = "managed_money_long"
+        short_attr = "managed_money_short"
+    elif method_id == "positioning.cot_commercial.v1":
+        report_type = "legacy"
+        long_attr = "producer_long"
+        short_attr = "producer_short"
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unknown positioning method_id {method_id!r}",
+        )
+
+    target = as_of if as_of is not None else utcnow()
+    earliest = target - timedelta(weeks=lookback_weeks)
+    cot_rows = list(
+        session.scalars(
+            select(COTWeekly)
+            .where(COTWeekly.instrument_id == instrument_id)
+            .where(COTWeekly.report_type == report_type)
+            .where(COTWeekly.publication_ts <= target)
+            .where(COTWeekly.report_ts >= earliest)
+            .order_by(COTWeekly.report_ts.asc())
+        )
+    )
+    signal_rows = list(
+        session.scalars(
+            select(SignalValue)
+            .where(SignalValue.signal_id == method_id)
+            .where(SignalValue.instrument_id == instrument_id)
+            .where(SignalValue.observation_ts <= target)
+            .order_by(SignalValue.value_ts.asc())
+        )
+    )
+    sig_by_ts = {sv.value_ts: sv for sv in signal_rows}
+
+    out: list[PositioningBreakdownPoint] = []
+    for r in cot_rows:
+        long_v = _opt_float(getattr(r, long_attr))
+        short_v = _opt_float(getattr(r, short_attr))
+        net_v = _net(getattr(r, long_attr), getattr(r, short_attr))
+        sig = sig_by_ts.get(r.report_ts)
+        out.append(
+            PositioningBreakdownPoint(
+                report_ts=r.report_ts,
+                publication_ts=r.publication_ts,
+                long=long_v,
+                short=short_v,
+                net=net_v,
+                open_interest=_opt_float(r.open_interest),
+                raw_value=_opt_float(sig.raw_value) if sig else None,
+                zscore=_opt_float(sig.zscore) if sig else None,
+                confidence=_opt_float(sig.confidence) if sig else None,
+            )
+        )
+    return out
+
+
+class DislocationExplainedVariancePoint(BaseModel):
+    """One observation of explained_variance over time."""
+
+    value_ts: datetime
+    explained_variance: float | None
+
+
+@router.get(
+    "/dislocation/explained_variance",
+    response_model=list[DislocationExplainedVariancePoint],
+)
+def dislocation_explained_variance(
+    session: SessionDep,
+    method_id: str = Query(default="dislocation.pca.v1"),
+    from_: datetime | None = Query(default=None, alias="from"),
+    to: datetime | None = Query(default=None),
+) -> list[DislocationExplainedVariancePoint]:
+    """Time series of ``signal_values.metadata.explained_variance`` for
+    the chosen dislocation method. PCA's value steps weekly (by Stage
+    4B refit cadence); DFM's evolves smoothly.
+
+    Aggregates per-``value_ts`` by averaging across instruments — every
+    instrument in the same fit shares the same explained_variance, so
+    the average is just a deduplication.
+    """
+    if method_id not in ("dislocation.pca.v1", "dislocation.dfm.v1"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unknown dislocation method_id {method_id!r}",
+        )
+    stmt = (
+        select(SignalValue)
+        .where(SignalValue.signal_id == method_id)
+        .order_by(SignalValue.value_ts.asc())
+    )
+    if from_ is not None:
+        stmt = stmt.where(SignalValue.value_ts >= from_)
+    if to is not None:
+        stmt = stmt.where(SignalValue.value_ts <= to)
+    rows = list(session.scalars(stmt))
+
+    by_ts: dict[datetime, list[float]] = {}
+    for r in rows:
+        meta = r.signal_metadata or {}
+        ev = None
+        if isinstance(meta, dict):
+            ev = _opt_float(meta.get("explained_variance"))
+        if ev is not None:
+            by_ts.setdefault(r.value_ts, []).append(ev)
+
+    out: list[DislocationExplainedVariancePoint] = []
+    for ts in sorted(by_ts):
+        values = by_ts[ts]
+        avg = sum(values) / len(values) if values else None
+        out.append(
+            DislocationExplainedVariancePoint(value_ts=ts, explained_variance=avg)
+        )
+    return out
+
+
+class FactorContributionRow(BaseModel):
+    """One factor's contribution to a per-instrument signal score."""
+
+    factor_name: str
+    loading: float
+    zscore: float | None
+    contribution: float
+
+
+class FactorContributionsOut(BaseModel):
+    instrument_id: str
+    method_id: str
+    raw_value: float | None
+    sum_contributions: float
+    contributions: list[FactorContributionRow]
+
+
+@router.get(
+    "/factor_exposure/contributions", response_model=FactorContributionsOut
+)
+def factor_exposure_contributions(
+    session: SessionDep,
+    instrument_id: str = Query(..., min_length=1, max_length=32),
+    method_id: str = Query(default="factor_exposure.ols.v1"),
+    as_of: datetime | None = Query(default=None),
+) -> FactorContributionsOut:
+    """Per-factor contribution to the current signal score.
+
+    For OLS: loading = beta, contribution = -beta * z_today (matches
+    the long-bias convention's negation). For RF / CF, loading is
+    feature-importance / CATE; contribution uses the same sign rule.
+    Sum of contributions matches the stored ``zscore`` (pre-tanh
+    raw score) modulo numerical rounding.
+    """
+    if method_id not in (
+        "factor_exposure.ols.v1",
+        "factor_exposure.rf.v1",
+        "factor_exposure.causal_forest.v1",
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unknown factor exposure method_id {method_id!r}",
+        )
+
+    target = as_of if as_of is not None else utcnow()
+    sv = (
+        session.scalars(
+            select(SignalValue)
+            .where(SignalValue.signal_id == method_id)
+            .where(SignalValue.instrument_id == instrument_id)
+            .where(SignalValue.observation_ts <= target)
+            .order_by(SignalValue.value_ts.desc())
+            .limit(1)
+        )
+    ).first()
+    if sv is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"no {method_id} signal value yet for instrument "
+                f"{instrument_id!r}"
+            ),
+        )
+
+    meta = sv.signal_metadata or {}
+    loadings: dict[str, float] = {}
+    zscores: dict[str, float] = {}
+    if isinstance(meta, dict):
+        raw_loadings = meta.get("factor_loadings", {}) or {}
+        raw_zs = meta.get("factor_zscores", {}) or {}
+        if isinstance(raw_loadings, dict):
+            loadings = {
+                k: float(v)
+                for k, v in raw_loadings.items()
+                if isinstance(v, int | float)
+            }
+        if isinstance(raw_zs, dict):
+            zscores = {
+                k: float(v)
+                for k, v in raw_zs.items()
+                if isinstance(v, int | float)
+            }
+
+    contributions: list[FactorContributionRow] = []
+    for factor_name in sorted(set(loadings) | set(zscores)):
+        loading = loadings.get(factor_name, 0.0)
+        z = zscores.get(factor_name)
+        contribution = -loading * (z if z is not None else 0.0)
+        contributions.append(
+            FactorContributionRow(
+                factor_name=factor_name,
+                loading=loading,
+                zscore=z,
+                contribution=contribution,
+            )
+        )
+    return FactorContributionsOut(
+        instrument_id=instrument_id,
+        method_id=method_id,
+        raw_value=_opt_float(sv.raw_value),
+        sum_contributions=sum(c.contribution for c in contributions),
+        contributions=contributions,
+    )
+
+
 class FactorZScoreOut(BaseModel):
     """Latest factor z-scores for the heat-of-the-market view."""
 

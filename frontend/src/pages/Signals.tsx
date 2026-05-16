@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ALL_COMPONENTS, useSignalsViewStore } from "@/stores/signalsView";
 
 type Tab = "heatmap" | "detail" | "decay";
 
@@ -26,14 +27,6 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "heatmap", label: "Heatmap" },
   { key: "detail", label: "Detail" },
   { key: "decay", label: "Decay" },
-];
-
-const COMPONENT_ORDER: Array<{ key: string; label: string }> = [
-  { key: "trend_signal", label: "Trend" },
-  { key: "carry_signal", label: "Carry" },
-  { key: "value_signal", label: "Value" },
-  { key: "positioning_signal", label: "Positioning" },
-  { key: "dislocation_signal", label: "Dislocation" },
 ];
 
 export default function Signals() {
@@ -68,6 +61,37 @@ export default function Signals() {
         ))}
       </div>
 
+      <nav
+        className="flex flex-wrap gap-2 text-xs"
+        aria-label="Per-component pages"
+      >
+        <span className="text-muted-foreground">Drill in:</span>
+        <Link
+          to="/signals/positioning"
+          className="rounded border px-2 py-1 hover:bg-accent"
+        >
+          Positioning →
+        </Link>
+        <Link
+          to="/signals/dislocation"
+          className="rounded border px-2 py-1 hover:bg-accent"
+        >
+          Dislocation →
+        </Link>
+        <Link
+          to="/signals/factor_exposure"
+          className="rounded border px-2 py-1 hover:bg-accent"
+        >
+          Factor exposure →
+        </Link>
+        <Link
+          to="/signals/catalyst"
+          className="rounded border px-2 py-1 hover:bg-accent"
+        >
+          Catalyst →
+        </Link>
+      </nav>
+
       {tab === "heatmap" && <HeatmapTab />}
       {tab === "detail" && <DetailTab />}
       {tab === "decay" && <DecayTab />}
@@ -97,6 +121,15 @@ function HeatmapTab() {
     queryKey: ["data.instruments"],
     queryFn: apiMethods.listInstruments,
   });
+  const visible = useSignalsViewStore((s) => s.visibleComponents);
+  const toggle = useSignalsViewStore((s) => s.toggleComponent);
+  const showAll = useSignalsViewStore((s) => s.showAll);
+
+  const visibleSet = useMemo(() => new Set(visible), [visible]);
+  const visibleColumns = useMemo(
+    () => ALL_COMPONENTS.filter((c) => visibleSet.has(c.key)),
+    [visibleSet],
+  );
 
   const matrix = useMemo(() => {
     const byKey: Record<string, HeatmapCell> = {};
@@ -122,11 +155,39 @@ function HeatmapTab() {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        <div
+          className="mb-4 flex flex-wrap items-center gap-3 rounded-md border bg-muted/40 px-3 py-2 text-xs"
+          aria-label="Component column selector"
+        >
+          <span className="text-muted-foreground">Show columns:</span>
+          {ALL_COMPONENTS.map((c) => (
+            <label
+              key={c.key}
+              className="flex cursor-pointer items-center gap-1.5"
+            >
+              <input
+                type="checkbox"
+                checked={visibleSet.has(c.key)}
+                onChange={() => toggle(c.key)}
+                className="h-3.5 w-3.5 cursor-pointer"
+                aria-label={`Toggle ${c.label} column`}
+              />
+              <span>{c.label}</span>
+            </label>
+          ))}
+          <button
+            type="button"
+            onClick={showAll}
+            className="ml-auto text-xs text-muted-foreground underline-offset-2 hover:underline"
+          >
+            Show all
+          </button>
+        </div>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>instrument</TableHead>
-              {COMPONENT_ORDER.map((c) => (
+              {visibleColumns.map((c) => (
                 <TableHead key={c.key}>{c.label}</TableHead>
               ))}
             </TableRow>
@@ -135,7 +196,7 @@ function HeatmapTab() {
             {rows.map((instrument_id) => (
               <TableRow key={instrument_id}>
                 <TableCell className="font-mono text-xs">{instrument_id}</TableCell>
-                {COMPONENT_ORDER.map((c) => {
+                {visibleColumns.map((c) => {
                   const cell = matrix[`${instrument_id}|${c.key}`];
                   if (!cell)
                     return (
