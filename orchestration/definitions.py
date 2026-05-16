@@ -47,6 +47,7 @@ from orchestration.assets import (
     signal_positioning,
     signal_trend,
     signal_value,
+    signal_vol_surface,
 )
 
 log = get_logger(__name__)
@@ -138,9 +139,10 @@ compute_all_signals_job = define_asset_job(
         signal_catalyst,
         signal_alt_data,
         signal_nowcasting,
+        signal_vol_surface,
     ),
     description=(
-        "Daily computation of all signal families."
+        "Daily computation of all 10 signal families."
     ),
 )
 

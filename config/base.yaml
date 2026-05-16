@@ -145,6 +145,15 @@ signals:
       cadence: weekly
       day_of_week: 0
       hour_utc: 2
+  vol_surface:
+    data_source: "yfinance"
+    instruments: [GLD, SLV, USO, UNG, DBA, SPY]
+    min_strikes_per_slice: 5
+    iv_rv_window_days: 60
+    skew_delta: 0.25
+    # Stage 5 architectural promise: paid data source is a config
+    # change (set data_source to "polygon" / "alpha_vantage" / "orats"
+    # and register the matching OptionsChainIngester subclass).
   nowcasting:
     lookback_releases: 60
     bvar:

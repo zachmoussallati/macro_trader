@@ -28,6 +28,7 @@ from orchestration.assets.signals import (
     signal_positioning,
     signal_trend,
     signal_value,
+    signal_vol_surface,
 )
 
 ALL_ASSETS = [
@@ -67,4 +68,5 @@ __all__ = [
     "signal_positioning",
     "signal_trend",
     "signal_value",
+    "signal_vol_surface",
 ]

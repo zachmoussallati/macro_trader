@@ -52,6 +52,7 @@ def register_all_methods(session: Session) -> None:
         ("catalyst_signal", "macro_trader.signals.catalyst.register"),
         ("alt_data_signal", "macro_trader.signals.alt_data.register"),
         ("nowcasting_signal", "macro_trader.signals.nowcasting.register"),
+        ("vol_surface_signal", "macro_trader.signals.vol_surface.register"),
     ):
         try:
             module = __import__(importer, fromlist=["register"])

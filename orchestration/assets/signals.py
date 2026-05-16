@@ -31,6 +31,7 @@ from macro_trader.signals.nowcasting.runner import run_daily_nowcasting
 from macro_trader.signals.positioning.runner import run_daily_positioning
 from macro_trader.signals.trend.runner import run_daily_trend
 from macro_trader.signals.value.runner import run_daily_value
+from macro_trader.signals.vol_surface.runner import run_daily_vol_surface
 
 
 def _summarise(written: dict[str, int]) -> dict:
@@ -408,6 +409,31 @@ def signal_nowcasting(
     return MaterializeResult(metadata=_summarise(written))
 
 
+@asset(
+    group_name="signals_vol_surface",
+    description=(
+        "Daily vol-surface signals (raw chain metrics + spline-fitted "
+        "surface). Reads from market_data.options_chains; emits a "
+        "historical_backtest_supported: False flag in every output's "
+        "metadata so Stage 9 backtester skips the family until paid "
+        "options data lands."
+    ),
+    ins={
+        "daily_data_quality": AssetIn(key="daily_data_quality"),
+    },
+)
+def signal_vol_surface(
+    context: AssetExecutionContext,
+    daily_data_quality: None,
+) -> MaterializeResult:
+    session_factory = get_sessionmaker()
+    with session_factory() as session:
+        written = run_daily_vol_surface(session)
+        session.commit()
+    context.log.info(f"signals.vol_surface.written={written}")
+    return MaterializeResult(metadata=_summarise(written))
+
+
 SIGNAL_ASSETS = [
     signal_trend,
     signal_carry,
@@ -422,4 +448,5 @@ SIGNAL_ASSETS = [
     signal_alt_data,
     nowcasting_models_refit,
     signal_nowcasting,
+    signal_vol_surface,
 ]
