@@ -14,6 +14,12 @@ from orchestration.assets.ingest import (
     ingest_usda,
     ingest_yfinance_bars,
 )
+from orchestration.assets.regime import (
+    REGIME_ASSETS,
+    regime_attribution_compute,
+    regime_classification,
+    regime_models_refit,
+)
 from orchestration.assets.signals import (
     SIGNAL_ASSETS,
     catalyst_models_refit,
@@ -38,6 +44,7 @@ ALL_ASSETS = [
     *CALENDAR_ASSETS,
     *DATA_QUALITY_ASSETS,
     *SIGNAL_ASSETS,
+    *REGIME_ASSETS,
 ]
 
 __all__ = [
@@ -45,6 +52,7 @@ __all__ = [
     "CALENDAR_ASSETS",
     "DATA_QUALITY_ASSETS",
     "INGEST_ASSETS",
+    "REGIME_ASSETS",
     "SIGNAL_ASSETS",
     "catalyst_models_refit",
     "daily_data_quality",
@@ -61,6 +69,9 @@ __all__ = [
     "ingest_yfinance_bars",
     "nowcasting_models_refit",
     "refresh_calendar_events",
+    "regime_attribution_compute",
+    "regime_classification",
+    "regime_models_refit",
     "signal_alt_data",
     "signal_carry",
     "signal_catalyst",

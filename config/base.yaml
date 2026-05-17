@@ -68,6 +68,7 @@ signals:
     alt_data_signal: alt_data.eia_storage.v1
     vol_surface_signal: vol_surface.raw.v1
     nowcasting_signal: nowcasting.ols_ar.v1
+    regime_classifier: regime.rules.v1
   trend:
     sma_short:
       fast: 10
@@ -217,3 +218,56 @@ signals:
     rolling_sharpe_vol_target: 0.10
   schedule:
     daily_run_time_utc: "23:30"
+
+# Stage 6 — regime classifier
+regime:
+  named_regimes:
+    - risk_on_growth
+    - risk_off_defensive
+    - stagflation
+    - carry_friendly
+    - vol_spike
+  rules:
+    vix_high_threshold: 30
+    vix_low_threshold: 15
+    realized_vol_high: 0.25
+    growth_z_threshold: 0.5
+    inflation_z_threshold: 0.5
+    usd_z_neutral_band: 0.5
+  gmm:
+    n_components: 5
+    covariance_type: full
+    random_state: 42
+    lookback_days: 504
+    refit:
+      cadence: weekly
+      day_of_week: 0
+      hour_utc: 4
+  hmm:
+    n_components: 5
+    covariance_type: full
+    n_iter: 200
+    random_state: 42
+    lookback_days: 1260
+    refit:
+      cadence: quarterly
+      hour_utc: 4
+  msvar:
+    n_regimes: 5
+    n_iter: 500
+    lookback_days: 1260
+    refit:
+      cadence: quarterly
+      hour_utc: 4
+    fallback_to_univariate_on_fail: true
+  bocpd:
+    hazard_lambda: 60
+    lookback_days: 504
+    threshold_for_alert: 0.7
+  attribution:
+    lookback_window_days: 252
+    min_observations_per_cell: 20
+    refit:
+      cadence: weekly
+      day_of_week: 0
+      hour_utc: 5

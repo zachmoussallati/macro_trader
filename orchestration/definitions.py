@@ -39,6 +39,9 @@ from orchestration.assets import (
     ingest_yfinance_bars,
     nowcasting_models_refit,
     refresh_calendar_events,
+    regime_attribution_compute,
+    regime_classification,
+    regime_models_refit,
     signal_alt_data,
     signal_carry,
     signal_catalyst,
@@ -189,6 +192,31 @@ nowcasting_refit_job = define_asset_job(
     ),
 )
 
+regime_refit_job = define_asset_job(
+    name="regime_refit_job",
+    selection=AssetSelection.assets(regime_models_refit),
+    description=(
+        "Weekly refit of GMM + (quarterly) HMM + MS-VAR regime "
+        "classifiers (Sunday 04:00 UTC)."
+    ),
+)
+
+regime_classification_job = define_asset_job(
+    name="regime_classification_job",
+    selection=AssetSelection.assets(regime_classification),
+    description="Daily regime classification across all 5 methods.",
+)
+
+regime_attribution_job = define_asset_job(
+    name="regime_attribution_job",
+    selection=AssetSelection.assets(regime_attribution_compute),
+    description=(
+        "Weekly per-regime per-signal attribution compute (Sunday "
+        "05:00 UTC). Populates regime.regime_attribution for Stage 7 "
+        "composite scoring."
+    ),
+)
+
 
 # ----------------------------------------------------------------------
 # Schedules (all UTC)
@@ -282,6 +310,27 @@ SCHEDULES = [
         execution_timezone="UTC",
         description="Weekly refit of OLS-AR + BVAR nowcasting models.",
     ),
+    ScheduleDefinition(
+        name="regime_refit_weekly_sunday_0400_utc",
+        cron_schedule="0 4 * * 0",
+        job=regime_refit_job,
+        execution_timezone="UTC",
+        description="Weekly refit of regime classifiers (GMM weekly; HMM/MS-VAR quarterly).",
+    ),
+    ScheduleDefinition(
+        name="regime_attribution_weekly_sunday_0500_utc",
+        cron_schedule="0 5 * * 0",
+        job=regime_attribution_job,
+        execution_timezone="UTC",
+        description="Weekly per-regime per-signal performance attribution.",
+    ),
+    ScheduleDefinition(
+        name="regime_classification_daily_2330_utc",
+        cron_schedule="30 23 * * *",
+        job=regime_classification_job,
+        execution_timezone="UTC",
+        description="Daily regime classification (alongside compute_all_signals_job).",
+    ),
 ]
 
 
@@ -309,6 +358,9 @@ defs = Definitions(
         factor_exposure_refit_job,
         catalyst_refit_job,
         nowcasting_refit_job,
+        regime_refit_job,
+        regime_classification_job,
+        regime_attribution_job,
     ],
     schedules=SCHEDULES,
     resources=_resources(),

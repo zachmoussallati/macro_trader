@@ -12,8 +12,14 @@ from macro_trader.db.models.alt_data import (
 )
 from macro_trader.db.models.auth import RefreshTokenRow, User, UserRole
 from macro_trader.db.models.macro_data import CalendarEvent, Series, SeriesObservation
-from macro_trader.db.models.market_data import DailyBar, Instrument
+from macro_trader.db.models.market_data import (
+    DailyBar,
+    Instrument,
+    OptionsChain,
+    OptionsSurface,
+)
 from macro_trader.db.models.positioning import COTWeekly
+from macro_trader.db.models.regime import RegimeAttribution, RegimeState
 from macro_trader.db.models.signals import SignalValue
 from macro_trader.db.models.system import (
     DataFreshness,
@@ -41,7 +47,11 @@ __all__ = [
     "MethodComparisonRow",
     "MethodRegistryRow",
     "MethodStatusHistoryRow",
+    "OptionsChain",
+    "OptionsSurface",
     "RefreshTokenRow",
+    "RegimeAttribution",
+    "RegimeState",
     "Series",
     "SeriesObservation",
     "SignalValue",

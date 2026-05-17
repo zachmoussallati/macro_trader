@@ -40,6 +40,7 @@ dependencies = [
     "scipy>=1.14.0",
     "statsmodels>=0.14.4",
     "scikit-learn>=1.5.2",
+    "hmmlearn>=0.3.0",  # Stage 6 regime HMM
     # Stage 2 — data sources
     "fredapi>=0.5.2",
     "yfinance>=0.2.50",
