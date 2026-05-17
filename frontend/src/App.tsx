@@ -5,6 +5,7 @@ import Data from "@/pages/Data";
 import Home from "@/pages/Home";
 import Login from "@/pages/Login";
 import Methods from "@/pages/Methods";
+import Regime from "@/pages/Regime";
 import Signals from "@/pages/Signals";
 import SignalsAltData from "@/pages/SignalsAltData";
 import SignalsCatalyst from "@/pages/SignalsCatalyst";
@@ -117,6 +118,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <SignalsAltData />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/regime"
+            element={
+              <ProtectedRoute>
+                <Regime />
               </ProtectedRoute>
             }
           />

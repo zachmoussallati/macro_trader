@@ -386,6 +386,47 @@ export interface AltDataComponent {
   extras: Record<string, unknown>;
 }
 
+// Stage 6: regime classifier
+export interface RegimeMethod {
+  method_id: string;
+  name: string;
+  status: string;
+}
+
+export interface RegimeCurrent {
+  method_id: string;
+  value_ts: string;
+  observation_ts: string;
+  label: string;
+  probability_vector: Record<string, number>;
+  confidence: number | null;
+  transition_prob: number | null;
+  days_in_regime: number | null;
+}
+
+export interface RegimeHistoryPoint {
+  value_ts: string;
+  label: string;
+  confidence: number | null;
+  transition_prob: number | null;
+}
+
+export interface RegimeAttributionRow {
+  regime_method_id: string;
+  regime_label: string;
+  signal_method_id: string;
+  value_ts: string;
+  n_observations: number;
+  mean_return: number | null;
+  sharpe: number | null;
+  hit_rate: number | null;
+}
+
+export interface ChangepointPoint {
+  value_ts: string;
+  changepoint_probability: number;
+}
+
 export const apiMethods = {
   // ----- core -----
   health: () => api.get<HealthResponse>("/health"),
@@ -555,4 +596,29 @@ export const apiMethods = {
 
   // ----- alt_data (Stage 5) -----
   altDataComponents: () => api.get<AltDataComponent[]>("/signals/alt_data/components"),
+
+  // ----- regime (Stage 6) -----
+  regimeMethods: () => api.get<RegimeMethod[]>("/regime/methods"),
+  regimeCurrent: (method_id = "regime.rules.v1") =>
+    api.get<RegimeCurrent | null>(
+      `/regime/current?method_id=${encodeURIComponent(method_id)}`,
+    ),
+  regimeHistory: (method_id = "regime.rules.v1", params: { from?: string; to?: string } = {}) => {
+    const q = new URLSearchParams({ method_id });
+    if (params.from) q.set("from", params.from);
+    if (params.to) q.set("to", params.to);
+    return api.get<RegimeHistoryPoint[]>(`/regime/history?${q.toString()}`);
+  },
+  regimeAttribution: (params: { regime_method?: string; signal_method?: string } = {}) => {
+    const q = new URLSearchParams();
+    if (params.regime_method) q.set("regime_method", params.regime_method);
+    if (params.signal_method) q.set("signal_method", params.signal_method);
+    return api.get<RegimeAttributionRow[]>(`/regime/attribution?${q.toString()}`);
+  },
+  regimeChangepoints: (params: { from?: string; to?: string } = {}) => {
+    const q = new URLSearchParams();
+    if (params.from) q.set("from", params.from);
+    if (params.to) q.set("to", params.to);
+    return api.get<ChangepointPoint[]>(`/regime/changepoints?${q.toString()}`);
+  },
 };
