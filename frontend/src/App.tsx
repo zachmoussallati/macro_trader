@@ -6,6 +6,7 @@ import Data from "@/pages/Data";
 import Home from "@/pages/Home";
 import Login from "@/pages/Login";
 import Methods from "@/pages/Methods";
+import Portfolio from "@/pages/Portfolio";
 import Regime from "@/pages/Regime";
 import Signals from "@/pages/Signals";
 import SignalsAltData from "@/pages/SignalsAltData";
@@ -135,6 +136,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <Composite />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/portfolio"
+            element={
+              <ProtectedRoute>
+                <Portfolio />
               </ProtectedRoute>
             }
           />

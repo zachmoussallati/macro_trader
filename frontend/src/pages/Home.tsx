@@ -10,6 +10,7 @@ import {
   type CompositeScoreRow,
   type Freshness,
   type HealthResponse,
+  type PortfolioPositionRow,
 } from "@/api/client";
 import { useAuthStore } from "@/stores/auth";
 
@@ -50,6 +51,14 @@ export default function Home() {
   const transition = useQuery({
     queryKey: ["composite.transition.home"],
     queryFn: () => apiMethods.compositeTransitionMultiplier({}),
+  });
+  const positions = useQuery({
+    queryKey: ["portfolio.positions.home"],
+    queryFn: () => apiMethods.portfolioPositions({ method_id: "portfolio.erc.v1" }),
+  });
+  const drawdownState = useQuery({
+    queryKey: ["portfolio.drawdown.home"],
+    queryFn: () => apiMethods.portfolioDrawdown("portfolio.erc.v1"),
   });
 
   const { email, logout } = useAuthStore();
@@ -94,13 +103,23 @@ export default function Home() {
       ? "composite.linear.v1"
       : "heatmap fallback";
 
+  const topPositions = useMemo(() => {
+    const list = positions.data ?? [];
+    return [...list].sort(
+      (a: PortfolioPositionRow, b: PortfolioPositionRow) =>
+        Math.abs(b.target_weight) - Math.abs(a.target_weight),
+    );
+  }, [positions.data]);
+  const topLongPositions = topPositions.filter((p) => p.target_weight > 0).slice(0, 5);
+  const topShortPositions = topPositions.filter((p) => p.target_weight < 0).slice(0, 5);
+
   return (
     <div className="mx-auto max-w-5xl p-8 space-y-6">
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-semibold">Macro Trader</h1>
           <p className="text-muted-foreground">
-            Stage 7 — Composite scoring + regime conditioning
+            Stage 8 — Portfolio construction + drawdown gates
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -315,6 +334,73 @@ export default function Home() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Today's sized portfolio</CardTitle>
+          <CardDescription>
+            From <code className="text-xs">portfolio.erc.v1</code>
+            {drawdownState.data &&
+              drawdownState.data.current_gate_level !== "none" && (
+                <>
+                  {" · gate "}
+                  <Badge variant="secondary">
+                    {drawdownState.data.current_gate_level}
+                  </Badge>{" "}
+                  scaling{" "}
+                  {drawdownState.data.effective_scaling_factor.toFixed(2)}
+                </>
+              )}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {topPositions.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              No positions yet. Run portfolio_positions_job (00:05 UTC).
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2">
+                  Top 5 long sizes
+                </h4>
+                <ul className="space-y-1 text-sm">
+                  {topLongPositions.map((p) => (
+                    <li
+                      key={p.instrument_id}
+                      className="flex justify-between font-mono text-xs"
+                    >
+                      <span>{p.instrument_id}</span>
+                      <span>{p.target_weight.toFixed(3)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2">
+                  Top 5 short sizes
+                </h4>
+                <ul className="space-y-1 text-sm">
+                  {topShortPositions.map((p) => (
+                    <li
+                      key={p.instrument_id}
+                      className="flex justify-between font-mono text-xs"
+                    >
+                      <span>{p.instrument_id}</span>
+                      <span>{p.target_weight.toFixed(3)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+          <div className="mt-3">
+            <Button asChild variant="outline" size="sm">
+              <Link to="/portfolio">Open /portfolio →</Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

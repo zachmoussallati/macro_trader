@@ -16,6 +16,7 @@ from api.routers.composite import router as composite_router
 from api.routers.data import router as data_router
 from api.routers.health import router as health_router
 from api.routers.methods import router as methods_router
+from api.routers.portfolio import router as portfolio_router
 from api.routers.regime import router as regime_router
 from api.routers.signals import router as signals_router
 from macro_trader import __version__
@@ -85,6 +86,7 @@ def create_app() -> FastAPI:
     app.include_router(signals_router, prefix=API_PREFIX)
     app.include_router(regime_router, prefix=API_PREFIX)
     app.include_router(composite_router, prefix=API_PREFIX)
+    app.include_router(portfolio_router, prefix=API_PREFIX)
 
     return app
 

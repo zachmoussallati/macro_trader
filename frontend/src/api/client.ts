@@ -494,6 +494,82 @@ export interface TransitionMultiplier {
   floor: number;
 }
 
+// Stage 8: portfolio construction
+export interface PortfolioMethodRow {
+  method_id: string;
+  component: string;
+  name: string;
+  status: string;
+}
+
+export interface PortfolioPositionRow {
+  method_id: string;
+  instrument_id: string;
+  as_of: string;
+  target_weight: number;
+  pre_gate_weight: number | null;
+  expected_vol_contribution: number | null;
+  composite_score: number | null;
+  block: string | null;
+  gate_level: string | null;
+  gate_scaling_factor: number | null;
+}
+
+export interface PortfolioPositionHistoryPoint {
+  as_of: string;
+  target_weight: number;
+  pre_gate_weight: number | null;
+}
+
+export interface PortfolioRiskInstrument {
+  instrument_id: string;
+  volatility: number | null;
+  vol_contribution: number | null;
+  block: string | null;
+}
+
+export interface PortfolioRisk {
+  method_id: string;
+  as_of: string | null;
+  instruments: PortfolioRiskInstrument[];
+  block_exposure: Record<string, number>;
+  portfolio_vol: number | null;
+}
+
+export interface DrawdownState {
+  method_id: string;
+  current_gate_level: string;
+  effective_scaling_factor: number;
+  level_1_triggered_at: string | null;
+  level_1_release_at: string | null;
+  level_2_triggered_at: string | null;
+  level_2_release_at: string | null;
+  level_3_triggered_at: string | null;
+  updated_at: string | null;
+}
+
+export interface EquityPoint {
+  as_of: string;
+  nav: number;
+  daily_return: number | null;
+  cumulative_return: number | null;
+  peak_nav: number | null;
+  drawdown_from_peak: number | null;
+}
+
+export interface CovariancePoint {
+  instrument_a: string;
+  instrument_b: string;
+  covariance: number | null;
+  correlation: number | null;
+}
+
+export interface CovarianceMatrix {
+  method_id: string;
+  as_of: string | null;
+  points: CovariancePoint[];
+}
+
 export const apiMethods = {
   // ----- core -----
   health: () => api.get<HealthResponse>("/health"),
@@ -731,5 +807,59 @@ export const apiMethods = {
     return api.get<TransitionMultiplier>(
       `/composite/transition_multiplier?${q.toString()}`,
     );
+  },
+
+  // ----- portfolio (Stage 8) -----
+  portfolioMethods: () => api.get<PortfolioMethodRow[]>("/portfolio/methods"),
+  portfolioPositions: (params: { method_id?: string; as_of?: string } = {}) => {
+    const q = new URLSearchParams();
+    if (params.method_id) q.set("method_id", params.method_id);
+    if (params.as_of) q.set("as_of", params.as_of);
+    return api.get<PortfolioPositionRow[]>(`/portfolio/positions?${q.toString()}`);
+  },
+  portfolioPositionsHistory: (
+    instrument: string,
+    params: { method_id?: string; from?: string; to?: string } = {},
+  ) => {
+    const q = new URLSearchParams({ instrument });
+    if (params.method_id) q.set("method_id", params.method_id);
+    if (params.from) q.set("from", params.from);
+    if (params.to) q.set("to", params.to);
+    return api.get<PortfolioPositionHistoryPoint[]>(
+      `/portfolio/positions/history?${q.toString()}`,
+    );
+  },
+  portfolioRisk: (
+    params: { method_id?: string; covariance_method_id?: string; as_of?: string } = {},
+  ) => {
+    const q = new URLSearchParams();
+    if (params.method_id) q.set("method_id", params.method_id);
+    if (params.covariance_method_id)
+      q.set("covariance_method_id", params.covariance_method_id);
+    if (params.as_of) q.set("as_of", params.as_of);
+    return api.get<PortfolioRisk>(`/portfolio/risk?${q.toString()}`);
+  },
+  portfolioDrawdown: (method_id = "portfolio.erc.v1") =>
+    api.get<DrawdownState>(
+      `/portfolio/drawdown?method_id=${encodeURIComponent(method_id)}`,
+    ),
+  portfolioDrawdownRelease: (method_id = "portfolio.erc.v1") =>
+    api.post<{ method_id: string; released: boolean; new_state: DrawdownState }>(
+      `/portfolio/drawdown/release?method_id=${encodeURIComponent(method_id)}`,
+    ),
+  portfolioEquity: (
+    params: { method_id?: string; from?: string; to?: string } = {},
+  ) => {
+    const q = new URLSearchParams();
+    if (params.method_id) q.set("method_id", params.method_id);
+    if (params.from) q.set("from", params.from);
+    if (params.to) q.set("to", params.to);
+    return api.get<EquityPoint[]>(`/portfolio/equity?${q.toString()}`);
+  },
+  portfolioCovariance: (params: { method_id?: string; as_of?: string } = {}) => {
+    const q = new URLSearchParams();
+    if (params.method_id) q.set("method_id", params.method_id);
+    if (params.as_of) q.set("as_of", params.as_of);
+    return api.get<CovarianceMatrix>(`/portfolio/covariance?${q.toString()}`);
   },
 };
