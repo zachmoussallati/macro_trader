@@ -427,6 +427,73 @@ export interface ChangepointPoint {
   changepoint_probability: number;
 }
 
+// Stage 7: composite scoring
+export interface CompositeMethod {
+  method_id: string;
+  name: string;
+  status: string;
+}
+
+export interface CompositeScoreRow {
+  method_id: string;
+  instrument_id: string;
+  value_ts: string;
+  observation_ts: string;
+  raw_score: number | null;
+  score: number | null;
+  confidence: number | null;
+  regime_label: string | null;
+  n_signals_used: number | null;
+}
+
+export interface CompositeContribution {
+  signal_method_id: string;
+  weight: number;
+  z: number;
+  confidence: number;
+  contribution: number;
+}
+
+export interface CompositeBreakdown {
+  method_id: string;
+  instrument_id: string;
+  value_ts: string;
+  observation_ts: string;
+  score: number | null;
+  raw_score: number | null;
+  regime_label: string | null;
+  transition_multiplier: number | null;
+  transition_probability: number | null;
+  contributions: CompositeContribution[];
+}
+
+export interface CompositePerRegimeWeight {
+  regime_label: string;
+  signal_method_id: string;
+  weight: number;
+  weight_source: string;
+}
+
+export interface CompositeEffectiveWeight {
+  signal_method_id: string;
+  effective_weight: number;
+}
+
+export interface CompositeWeights {
+  method_id: string;
+  snapshot_ts: string | null;
+  per_regime: CompositePerRegimeWeight[];
+  effective: CompositeEffectiveWeight[];
+  regime_probability_vector: Record<string, number> | null;
+}
+
+export interface TransitionMultiplier {
+  multiplier: number;
+  changepoint_probability: number | null;
+  threshold: number;
+  floor: number;
+}
+
 export const apiMethods = {
   // ----- core -----
   health: () => api.get<HealthResponse>("/health"),
@@ -620,5 +687,49 @@ export const apiMethods = {
     if (params.from) q.set("from", params.from);
     if (params.to) q.set("to", params.to);
     return api.get<ChangepointPoint[]>(`/regime/changepoints?${q.toString()}`);
+  },
+
+  // ----- composite (Stage 7) -----
+  compositeMethods: () => api.get<CompositeMethod[]>("/composite/methods"),
+  compositeScores: (params: { method_id?: string; as_of?: string } = {}) => {
+    const q = new URLSearchParams();
+    if (params.method_id) q.set("method_id", params.method_id);
+    if (params.as_of) q.set("as_of", params.as_of);
+    return api.get<CompositeScoreRow[]>(`/composite/scores?${q.toString()}`);
+  },
+  compositeBreakdown: (
+    instrument: string,
+    params: { method_id?: string; as_of?: string } = {},
+  ) => {
+    const q = new URLSearchParams({ instrument });
+    if (params.method_id) q.set("method_id", params.method_id);
+    if (params.as_of) q.set("as_of", params.as_of);
+    return api.get<CompositeBreakdown | null>(`/composite/breakdown?${q.toString()}`);
+  },
+  compositeWeights: (
+    params: { method_id?: string; regime_method_id?: string; as_of?: string } = {},
+  ) => {
+    const q = new URLSearchParams();
+    if (params.method_id) q.set("method_id", params.method_id);
+    if (params.regime_method_id) q.set("regime_method_id", params.regime_method_id);
+    if (params.as_of) q.set("as_of", params.as_of);
+    return api.get<CompositeWeights>(`/composite/weights?${q.toString()}`);
+  },
+  compositeTransitionMultiplier: (
+    params: {
+      as_of?: string;
+      bocpd_method_id?: string;
+      threshold?: number;
+      floor?: number;
+    } = {},
+  ) => {
+    const q = new URLSearchParams();
+    if (params.as_of) q.set("as_of", params.as_of);
+    if (params.bocpd_method_id) q.set("bocpd_method_id", params.bocpd_method_id);
+    if (params.threshold !== undefined) q.set("threshold", String(params.threshold));
+    if (params.floor !== undefined) q.set("floor", String(params.floor));
+    return api.get<TransitionMultiplier>(
+      `/composite/transition_multiplier?${q.toString()}`,
+    );
   },
 };

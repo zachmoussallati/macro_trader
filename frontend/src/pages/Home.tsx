@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   apiMethods,
   type CalendarEvent,
+  type CompositeScoreRow,
   type Freshness,
   type HealthResponse,
 } from "@/api/client";
@@ -38,6 +39,18 @@ export default function Home() {
     queryKey: ["signals.heatmap.home"],
     queryFn: apiMethods.signalHeatmap,
   });
+  const composite = useQuery({
+    queryKey: ["composite.scores.home"],
+    queryFn: () => apiMethods.compositeScores({ method_id: "composite.linear.v1" }),
+  });
+  const regime = useQuery({
+    queryKey: ["regime.current.home"],
+    queryFn: () => apiMethods.regimeCurrent("regime.rules.v1"),
+  });
+  const transition = useQuery({
+    queryKey: ["composite.transition.home"],
+    queryFn: () => apiMethods.compositeTransitionMultiplier({}),
+  });
 
   const { email, logout } = useAuthStore();
 
@@ -50,9 +63,20 @@ export default function Home() {
   );
   const topEvents = (events.data ?? []).slice(0, 5);
 
-  // Cross-component composite per instrument: sum of (zscore * confidence)
-  // across components. Rank to find top 5 long + top 5 short.
+  // Prefer the Stage 7 composite_scores endpoint when populated; fall
+  // back to the cross-component heatmap calculation for pre-Stage-7
+  // deploys (so Home still renders something useful before the
+  // composite job runs).
   const composites = useMemo(() => {
+    if (composite.data && composite.data.length > 0) {
+      return composite.data
+        .filter((c: CompositeScoreRow) => c.score !== null)
+        .map((c: CompositeScoreRow) => ({
+          instrument_id: c.instrument_id,
+          score: c.score as number,
+        }))
+        .sort((a, b) => b.score - a.score);
+    }
     const by_inst: Record<string, number> = {};
     for (const c of heatmap.data ?? []) {
       if (c.zscore === null || c.confidence === null) continue;
@@ -62,16 +86,22 @@ export default function Home() {
     return Object.entries(by_inst)
       .map(([instrument_id, score]) => ({ instrument_id, score }))
       .sort((a, b) => b.score - a.score);
-  }, [heatmap.data]);
+  }, [composite.data, heatmap.data]);
   const topLong = composites.slice(0, 5);
   const topShort = composites.slice(-5).reverse();
+  const compositeSource =
+    composite.data && composite.data.length > 0
+      ? "composite.linear.v1"
+      : "heatmap fallback";
 
   return (
     <div className="mx-auto max-w-5xl p-8 space-y-6">
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-semibold">Macro Trader</h1>
-          <p className="text-muted-foreground">Stage 3 — Signal Library Part 1</p>
+          <p className="text-muted-foreground">
+            Stage 7 — Composite scoring + regime conditioning
+          </p>
         </div>
         <div className="flex items-center gap-3">
           {email ? (
@@ -181,55 +211,110 @@ export default function Home() {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Top signals</CardTitle>
-          <CardDescription>
-            Cross-component composite: sum of (z-score × confidence) per instrument across
-            trend, carry, and value.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2">
-                Top 5 long
-              </h4>
-              <ul className="space-y-1 text-sm">
-                {topLong.length === 0 && (
-                  <li className="text-xs text-muted-foreground">
-                    Run compute_all_signals_job to populate.
-                  </li>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle>Top ideas</CardTitle>
+            <CardDescription>
+              Source: <code className="text-xs">{compositeSource}</code>. Falls
+              back to per-instrument (z-score × confidence) sum when the
+              composite job hasn&apos;t run yet.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2">
+                  Top 5 long
+                </h4>
+                <ul className="space-y-1 text-sm">
+                  {topLong.length === 0 && (
+                    <li className="text-xs text-muted-foreground">
+                      Run composite_score_job (daily 23:45 UTC) to populate.
+                    </li>
+                  )}
+                  {topLong.map(({ instrument_id, score }) => (
+                    <li
+                      key={instrument_id}
+                      className="flex justify-between font-mono text-xs"
+                    >
+                      <span>{instrument_id}</span>
+                      <span>{score.toFixed(2)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2">
+                  Top 5 short
+                </h4>
+                <ul className="space-y-1 text-sm">
+                  {topShort.map(({ instrument_id, score }) => (
+                    <li
+                      key={instrument_id}
+                      className="flex justify-between font-mono text-xs"
+                    >
+                      <span>{instrument_id}</span>
+                      <span>{score.toFixed(2)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <Button asChild variant="outline" size="sm">
+                <Link to="/composite">Open /composite →</Link>
+              </Button>
+              <Button asChild variant="ghost" size="sm">
+                <Link to="/signals">/signals heatmap →</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Regime + conviction</CardTitle>
+            <CardDescription>
+              Latest from <code className="text-xs">regime.rules.v1</code>.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {regime.data ? (
+              <div className="space-y-1">
+                <Badge variant="default">{regime.data.label}</Badge>
+                <p className="text-xs text-muted-foreground">
+                  {regime.data.days_in_regime !== null
+                    ? `${regime.data.days_in_regime} days in regime`
+                    : "days-in-regime unknown"}
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                No regime state yet — run regime_classification.
+              </p>
+            )}
+            {transition.data && (
+              <div className="space-y-1">
+                <p className="text-xs">
+                  conviction multiplier{" "}
+                  <span className="font-mono">
+                    {transition.data.multiplier.toFixed(2)}
+                  </span>
+                </p>
+                {transition.data.changepoint_probability !== null && (
+                  <p className="text-xs text-muted-foreground">
+                    cp {transition.data.changepoint_probability.toFixed(3)}
+                  </p>
                 )}
-                {topLong.map(({ instrument_id, score }) => (
-                  <li key={instrument_id} className="flex justify-between font-mono text-xs">
-                    <span>{instrument_id}</span>
-                    <span>{score.toFixed(2)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2">
-                Top 5 short
-              </h4>
-              <ul className="space-y-1 text-sm">
-                {topShort.map(({ instrument_id, score }) => (
-                  <li key={instrument_id} className="flex justify-between font-mono text-xs">
-                    <span>{instrument_id}</span>
-                    <span>{score.toFixed(2)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-          <div className="mt-3">
+              </div>
+            )}
             <Button asChild variant="outline" size="sm">
-              <Link to="/signals">Open /signals →</Link>
+              <Link to="/regime">Open /regime →</Link>
             </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
       <Card>
         <CardHeader>
