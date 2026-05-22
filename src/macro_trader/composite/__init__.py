@@ -12,13 +12,13 @@ in ``[-1, 1]`` combining the 10 signal families' outputs, weighted by:
 
 Three methods register at startup:
 
-- ``composite.linear.v1`` — BASELINE. Linear sum of weight × z ×
+- ``composite.linear.v1`` — BASELINE. Linear sum of weight * z *
   confidence with explicit transition-probability dampening.
 - ``composite.bayesian_hier.v1`` — SHADOW. Three-level
   Normal-Inverse-Gamma hierarchy (global / per-regime /
   per-instrument). Refit weekly.
 - ``composite.gbm.v1`` — SHADOW, gated on lightgbm. Gradient-boosted
-  regression of next-day return on the full signal × regime ×
+  regression of next-day return on the full signal * regime *
   instrument feature panel. Refit quarterly.
 
 The :func:`composite.weights.compute_regime_conditional_weights`

@@ -227,7 +227,7 @@ def compute_regime_conditional_weights(
     df = pd.DataFrame(rows)
     # Per-regime normalisation.
     df["normalised_weight"] = 0.0
-    for regime_label, group in df.groupby("regime_label"):
+    for _regime_label, group in df.groupby("regime_label"):
         total = float(group["raw_weight"].sum())
         if total <= 0:
             # All-zero (every sharpe was negative + clamped to floor=0)
@@ -271,7 +271,7 @@ def compute_regime_conditional_weights(
 
         # Re-normalise after smoothing (EWM doesn't guarantee per-regime
         # sums stay at 1).
-        for regime_label, group in df.groupby("regime_label"):
+        for _regime_label, group in df.groupby("regime_label"):
             total = float(group["final_weight"].sum())
             if total > 0:
                 df.loc[group.index, "final_weight"] = group["final_weight"] / total
