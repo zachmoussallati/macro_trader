@@ -64,10 +64,13 @@ dev = [
     "types-python-jose>=3.3.4",
 ]
 # Causal-ML extras for Stage 4B+ (factor exposure causal forest,
-# catalyst causal sensitivity). Heavy install (~200 MB); install via
+# catalyst causal sensitivity), Stage 7 GBM composite, and Stage 8
+# DCC-GARCH covariance. Heavy install (~200 MB); install via
 # `uv sync --extra ml` only when needed.
 ml = [
     "econml>=0.15.0",
+    "lightgbm>=4.0.0",
+    "arch>=7.0.0",
 ]
 
 [project.scripts]

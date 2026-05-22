@@ -18,6 +18,13 @@ from macro_trader.db.models.market_data import (
     OptionsChain,
     OptionsSurface,
 )
+from macro_trader.db.models.portfolio import (
+    CovarianceEstimate,
+    DrawdownStateRow,
+    EquityCurveRow,
+    Position,
+    VolatilityEstimate,
+)
 from macro_trader.db.models.positioning import COTWeekly
 from macro_trader.db.models.regime import RegimeAttribution, RegimeState
 from macro_trader.db.models.signals import CompositeScore, CompositeWeight, SignalValue
@@ -37,12 +44,15 @@ __all__ = [
     "CalendarEvent",
     "CompositeScore",
     "CompositeWeight",
+    "CovarianceEstimate",
     "DailyBar",
     "DataFreshness",
     "DataLineage",
     "DataQualityFlag",
     "DataSource",
+    "DrawdownStateRow",
     "EIAInventory",
+    "EquityCurveRow",
     "GoogleTrends",
     "HeartbeatRow",
     "Instrument",
@@ -51,6 +61,7 @@ __all__ = [
     "MethodStatusHistoryRow",
     "OptionsChain",
     "OptionsSurface",
+    "Position",
     "RefreshTokenRow",
     "RegimeAttribution",
     "RegimeState",
@@ -60,5 +71,6 @@ __all__ = [
     "USDAReport",
     "User",
     "UserRole",
+    "VolatilityEstimate",
     "WeatherData",
 ]
