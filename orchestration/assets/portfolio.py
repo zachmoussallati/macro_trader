@@ -19,8 +19,6 @@ Five assets:
   standalone refresh asset for manual operator triggers.)
 """
 
-from __future__ import annotations
-
 from dagster import (
     AssetExecutionContext,
     AssetIn,

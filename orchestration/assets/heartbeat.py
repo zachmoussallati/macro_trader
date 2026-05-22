@@ -4,7 +4,9 @@ Proves the Dagster orchestrator + DB connection are both live. Writes one
 row to ``system.heartbeat`` each tick.
 """
 
-from __future__ import annotations
+# NOTE: do NOT add `from __future__ import annotations` here. Dagster's
+# `_validate_context_type_hint` resolves `context: AssetExecutionContext`
+# at decorator-time and rejects string-form annotations.
 
 from typing import Any
 

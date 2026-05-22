@@ -8,7 +8,9 @@ Calendar refresh and the daily data-quality job are separate assets in
 ``orchestration/assets/data_quality.py`` and ``calendar.py``.
 """
 
-from __future__ import annotations
+# NOTE: do NOT add `from __future__ import annotations` here. Dagster's
+# `_validate_context_type_hint` resolves `context: AssetExecutionContext`
+# at decorator-time and rejects string-form annotations.
 
 from datetime import UTC
 

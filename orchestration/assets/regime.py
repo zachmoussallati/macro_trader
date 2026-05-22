@@ -12,8 +12,6 @@ Three assets:
   signal_values + daily_bars panels.
 """
 
-from __future__ import annotations
-
 from dagster import (
     AssetExecutionContext,
     AssetIn,

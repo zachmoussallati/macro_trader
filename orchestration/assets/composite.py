@@ -16,8 +16,6 @@ Three assets:
   results to ``system.method_comparisons``.
 """
 
-from __future__ import annotations
-
 from dagster import (
     AssetExecutionContext,
     AssetIn,

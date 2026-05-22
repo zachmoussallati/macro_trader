@@ -5,7 +5,9 @@ Each family is one asset that runs the family's daily runner. The
 signals run after data + quality are settled.
 """
 
-from __future__ import annotations
+# NOTE: do NOT add `from __future__ import annotations` here. Dagster's
+# `_validate_context_type_hint` resolves `context: AssetExecutionContext`
+# at decorator-time and rejects string-form annotations.
 
 from dagster import (
     AssetExecutionContext,
