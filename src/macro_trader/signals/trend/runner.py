@@ -10,10 +10,12 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 
 from macro_trader.db.models.market_data import Instrument
+from macro_trader.db.models.regime import RegimeState
 from macro_trader.db.models.system import HeartbeatRow
 from macro_trader.logging_setup import get_logger
 from macro_trader.methods.comparator import run_comparisons_for_component
 from macro_trader.signals.base import SignalInput, SignalMethod
+from macro_trader.signals.designated import resolve_id
 from macro_trader.signals.output import persist_signal_outputs
 from macro_trader.signals.trend.comparator import TrendSignalComparator
 from macro_trader.signals.trend.methods import (
@@ -47,6 +49,30 @@ def _active_instruments(session: Session) -> list[str]:
     return list(rows)
 
 
+def _latest_regime_label(session: Session) -> str | None:
+    """Latest regime label from the production-designated regime
+    classifier (e.g. ``regime.rules.v1``).
+
+    Returns ``None`` when:
+    - no regime classifier is designated (Stage 6 not deployed yet),
+    - the designated classifier hasn't run yet (no rows in
+      ``regime.regime_states``).
+
+    Callers should treat ``None`` as "fall back to Stage 3 equal
+    weights" rather than failing.
+    """
+    method_id = resolve_id("regime_classifier")
+    if method_id is None:
+        return None
+    row = session.scalar(
+        select(RegimeState)
+        .where(RegimeState.method_id == method_id)
+        .order_by(RegimeState.value_ts.desc(), RegimeState.observation_ts.desc())
+        .limit(1)
+    )
+    return row.label if row is not None else None
+
+
 def run_daily_trend(
     session: Session,
     *,
@@ -63,11 +89,13 @@ def run_daily_trend(
     """
     instruments = instruments or _active_instruments(session)
     now = utcnow()
+    regime_label = _latest_regime_label(session)
     sig_input = SignalInput(
         instrument_ids=instruments,
         as_of=now,
         start=now - timedelta(days=window_days),
         end=now,
+        regime_state=regime_label,
     )
 
     methods = list(methods) if methods is not None else default_trend_methods()
@@ -92,6 +120,7 @@ def run_daily_trend(
         as_of=sig_input.as_of,
         start=sig_input.start,
         end=sig_input.end,
+        regime_state=sig_input.regime_state,
         extras={"session": session},
     )
     run_comparisons_for_component(

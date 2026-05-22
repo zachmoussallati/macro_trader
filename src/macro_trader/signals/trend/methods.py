@@ -7,6 +7,14 @@
 
 All four output the standardised :class:`SignalOutput` shape. ``raw_value``
 is clipped to [-1, 1] via tanh so methods are comparable directly.
+
+Stage 7 wires the regime_state parameter the ensemble received as a
+no-op since Stage 3: when ``data.regime_state`` is set, the ensemble
+applies per-regime SMA-horizon weight multipliers from
+``signals.trend.regime_adjustments`` (config). E.g. in ``vol_spike``
+the short horizon (10/30 SMA) gets up-weighted 1.5x and the long
+horizon (50/200) gets down-weighted 0.25x. The adjustments are
+normalised so the ensemble weights still sum to 1.
 """
 
 from __future__ import annotations
@@ -30,6 +38,64 @@ from macro_trader.signals.output import (
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
+
+
+# Map between the method_id horizons and the short/medium/long config
+# slot names used by the regime adjustments table. The ensemble walks
+# this dict to resolve weights for whatever subset of SMA components
+# happens to be active.
+_HORIZON_BY_METHOD_ID = {
+    "trend.sma_short.v1": "short",
+    "trend.sma_medium.v1": "medium",
+    "trend.sma_long.v1": "long",
+}
+
+
+def _ensemble_weights_for_regime(
+    method_ids: list[str], regime_state: str | None
+) -> dict[str, float] | None:
+    """Build the weights dict to pass to ``equal_weighted``.
+
+    Returns ``None`` when:
+    - ``regime_state`` is None,
+    - no settings are loadable (test contexts that skip config init),
+    - the regime label isn't in the ``regime_adjustments`` config.
+
+    In all those cases the ensemble falls back to Stage 3 equal weights
+    (callers pass ``weights=None`` to equal_weighted).
+    """
+    if regime_state is None:
+        return None
+    # The signals settings only validate a small fixed schema
+    # (designated_per_component). Access the trend block via the
+    # module-level merged-config loader so we don't have to thread
+    # every parameter through pydantic models.
+    try:
+        from macro_trader.config import _load_merged_config
+
+        cfg = _load_merged_config()
+    except Exception:
+        return None
+    trend_cfg = cfg.get("signals", {}).get("trend", {})
+    base = trend_cfg.get("ensemble_weights", {})
+    adjustments_table = trend_cfg.get("regime_adjustments", {})
+    horizon_adj = adjustments_table.get(regime_state)
+    if not horizon_adj:
+        return None
+
+    weights: dict[str, float] = {}
+    for method_id in method_ids:
+        horizon = _HORIZON_BY_METHOD_ID.get(method_id)
+        if horizon is None:
+            continue
+        base_w = float(base.get(f"sma_{horizon}", 1.0 / max(len(method_ids), 1)))
+        mult = float(horizon_adj.get(horizon, 1.0))
+        weights[method_id] = base_w * mult
+
+    total = sum(weights.values())
+    if total <= 0:
+        return None
+    return {mid: w / total for mid, w in weights.items()}
 
 
 # ----------------------------------------------------------------------
@@ -239,7 +305,15 @@ class TrendEnsemble(SignalMethod):
         per_component: dict[str, list[SignalOutput]] = {}
         for c in self._components:
             per_component[c.metadata.method_id] = c.compute(data, session)
-        return equal_weighted(per_component, regime_state=data.regime_state)
+        # Stage 7: when a regime label is set, derive per-horizon
+        # weights from config. Otherwise fall back to Stage 3 equal
+        # weights.
+        weights = _ensemble_weights_for_regime(
+            list(per_component.keys()), data.regime_state
+        )
+        return equal_weighted(
+            per_component, weights=weights, regime_state=data.regime_state
+        )
 
 
 # ----------------------------------------------------------------------
