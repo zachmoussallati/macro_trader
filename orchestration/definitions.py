@@ -29,6 +29,8 @@ from orchestration.assets import (
     composite_gbm_refit,
     composite_score_compute,
     composite_weights_refit,
+    covariance_dcc_refit,
+    covariance_estimates_daily,
     daily_data_quality,
     dislocation_models_refit,
     factor_exposure_models_refit,
@@ -42,6 +44,7 @@ from orchestration.assets import (
     ingest_usda,
     ingest_yfinance_bars,
     nowcasting_models_refit,
+    portfolio_positions_daily,
     refresh_calendar_events,
     regime_attribution_compute,
     regime_classification,
@@ -258,6 +261,30 @@ composite_score_job = define_asset_job(
     ),
 )
 
+covariance_estimates_job = define_asset_job(
+    name="covariance_estimates_job",
+    selection=AssetSelection.assets(covariance_estimates_daily),
+    description=(
+        "Daily covariance estimates (23:50 UTC; 5 min after composite "
+        "scoring at 23:45)."
+    ),
+)
+
+covariance_dcc_refit_job = define_asset_job(
+    name="covariance_dcc_refit_job",
+    selection=AssetSelection.assets(covariance_dcc_refit),
+    description="Weekly DCC-GARCH refit (Sunday 07:30 UTC).",
+)
+
+portfolio_positions_job = define_asset_job(
+    name="portfolio_positions_job",
+    selection=AssetSelection.assets(portfolio_positions_daily),
+    description=(
+        "Daily portfolio sizing (next-day 00:05 UTC). Runs every "
+        "portfolio method; applies the production drawdown gate."
+    ),
+)
+
 
 # ----------------------------------------------------------------------
 # Schedules (all UTC)
@@ -409,6 +436,33 @@ SCHEDULES = [
             "after regime + signals at 23:30)."
         ),
     ),
+    ScheduleDefinition(
+        name="covariance_estimates_daily_2350_utc",
+        cron_schedule="50 23 * * *",
+        job=covariance_estimates_job,
+        execution_timezone="UTC",
+        description=(
+            "Daily covariance estimates (5 min after composite scoring "
+            "at 23:45)."
+        ),
+    ),
+    ScheduleDefinition(
+        name="portfolio_positions_daily_0005_utc",
+        cron_schedule="5 0 * * *",
+        job=portfolio_positions_job,
+        execution_timezone="UTC",
+        description=(
+            "Daily portfolio sizing (15 min after covariance + composite "
+            "at 23:45/23:50 the prior day)."
+        ),
+    ),
+    ScheduleDefinition(
+        name="covariance_dcc_refit_weekly_sunday_0730_utc",
+        cron_schedule="30 7 * * 0",
+        job=covariance_dcc_refit_job,
+        execution_timezone="UTC",
+        description="Weekly DCC-GARCH refit.",
+    ),
 ]
 
 
@@ -443,6 +497,9 @@ defs = Definitions(
         composite_bayesian_refit_job,
         composite_gbm_refit_job,
         composite_score_job,
+        covariance_estimates_job,
+        covariance_dcc_refit_job,
+        portfolio_positions_job,
     ],
     schedules=SCHEDULES,
     resources=_resources(),

@@ -21,6 +21,12 @@ from orchestration.assets.ingest import (
     ingest_usda,
     ingest_yfinance_bars,
 )
+from orchestration.assets.portfolio import (
+    PORTFOLIO_ASSETS,
+    covariance_dcc_refit,
+    covariance_estimates_daily,
+    portfolio_positions_daily,
+)
 from orchestration.assets.regime import (
     REGIME_ASSETS,
     regime_attribution_compute,
@@ -53,6 +59,7 @@ ALL_ASSETS = [
     *SIGNAL_ASSETS,
     *REGIME_ASSETS,
     *COMPOSITE_ASSETS,
+    *PORTFOLIO_ASSETS,
 ]
 
 __all__ = [
@@ -61,6 +68,7 @@ __all__ = [
     "COMPOSITE_ASSETS",
     "DATA_QUALITY_ASSETS",
     "INGEST_ASSETS",
+    "PORTFOLIO_ASSETS",
     "REGIME_ASSETS",
     "SIGNAL_ASSETS",
     "catalyst_models_refit",
@@ -68,6 +76,8 @@ __all__ = [
     "composite_gbm_refit",
     "composite_score_compute",
     "composite_weights_refit",
+    "covariance_dcc_refit",
+    "covariance_estimates_daily",
     "daily_data_quality",
     "dislocation_models_refit",
     "factor_exposure_models_refit",
@@ -81,6 +91,7 @@ __all__ = [
     "ingest_usda",
     "ingest_yfinance_bars",
     "nowcasting_models_refit",
+    "portfolio_positions_daily",
     "refresh_calendar_events",
     "regime_attribution_compute",
     "regime_classification",
