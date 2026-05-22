@@ -23,9 +23,34 @@ beforeEach(() => {
       body = {};
     } else if (url.includes("/calendar/events")) {
       body = [];
+    } else if (url.includes("/regime/current")) {
+      // /regime/current returns null when no state exists (single object,
+      // not a list) — the Home regime card defensive-checks against null.
+      body = null;
+    } else if (url.includes("/composite/transition_multiplier")) {
+      body = {
+        multiplier: 1.0,
+        changepoint_probability: null,
+        threshold: 0.5,
+        floor: 0.5,
+      };
+    } else if (url.includes("/portfolio/drawdown")) {
+      body = {
+        method_id: "portfolio.erc.v1",
+        current_gate_level: "none",
+        effective_scaling_factor: 1.0,
+        level_1_triggered_at: null,
+        level_1_release_at: null,
+        level_2_triggered_at: null,
+        level_2_release_at: null,
+        level_3_triggered_at: null,
+        updated_at: null,
+      };
     } else if (url.includes("/methods")) {
       body = [];
     } else {
+      // Default to empty list for everything else (most endpoints are
+      // list-shape — signals, calendar, positions, composite scores).
       body = [];
     }
     return {

@@ -5,10 +5,23 @@ import { MemoryRouter } from "react-router-dom";
 import Regime from "../pages/Regime";
 
 beforeEach(() => {
-  global.fetch = vi.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    json: () => Promise.resolve([]),
+  global.fetch = vi.fn().mockImplementation((url: string) => {
+    // /regime/current is the one endpoint that returns a single object
+    // (or null when no state exists); the page defensive-checks
+    // `current.data === null`. Returning [] would be truthy and crash
+    // the downstream property access.
+    if (typeof url === "string" && url.includes("/regime/current")) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(null),
+      });
+    }
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve([]),
+    });
   }) as unknown as typeof fetch;
 });
 

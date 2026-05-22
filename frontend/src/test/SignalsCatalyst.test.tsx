@@ -28,8 +28,11 @@ function renderPage() {
 describe("SignalsCatalyst page", () => {
   it("renders the header and the days-ahead control", async () => {
     renderPage();
+    // The page now has two headings matching /catalyst/i: the h1 page
+    // title and the h3 "Catalyst pressure by instrument" card title.
+    // Use level: 1 to disambiguate.
     expect(
-      await screen.findByRole("heading", { name: /catalyst/i }),
+      await screen.findByRole("heading", { level: 1, name: /catalyst/i }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText(/days ahead/i)).toBeInTheDocument();
   });

@@ -5,16 +5,29 @@ import { MemoryRouter } from "react-router-dom";
 import SignalsVolSurface from "../pages/SignalsVolSurface";
 
 beforeEach(() => {
-  global.fetch = vi.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    json: () =>
-      Promise.resolve({
-        instrument_id: "GLD",
-        snapshot_ts: "2024-12-30T00:00:00Z",
-        underlying_price: null,
-        slices: [],
-      }),
+  global.fetch = vi.fn().mockImplementation((url: string) => {
+    // /signals/vol_surface/slices returns a VolSurfaceSlices *object*
+    // (slices: []); /signals/vol_surface/term_structure returns a
+    // VolSurfaceTermStructurePoint[]. The two shapes are different; a
+    // catch-all mock will crash the page when term.data tries .map().
+    if (typeof url === "string" && url.includes("/term_structure")) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve([]),
+      });
+    }
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          instrument_id: "GLD",
+          snapshot_ts: "2024-12-30T00:00:00Z",
+          underlying_price: null,
+          slices: [],
+        }),
+    });
   }) as unknown as typeof fetch;
 });
 
