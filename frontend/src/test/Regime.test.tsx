@@ -41,8 +41,10 @@ function renderPage() {
 describe("Regime page", () => {
   it("renders the header", async () => {
     renderPage();
+    // The page has two headings matching /regime/i: the h1 page title
+    // and the h3 "Current regime" card title. Disambiguate by level.
     expect(
-      await screen.findByRole("heading", { name: /regime/i }),
+      await screen.findByRole("heading", { level: 1, name: /regime/i }),
     ).toBeInTheDocument();
   });
 
