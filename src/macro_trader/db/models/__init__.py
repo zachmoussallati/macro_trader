@@ -20,7 +20,7 @@ from macro_trader.db.models.market_data import (
 )
 from macro_trader.db.models.positioning import COTWeekly
 from macro_trader.db.models.regime import RegimeAttribution, RegimeState
-from macro_trader.db.models.signals import SignalValue
+from macro_trader.db.models.signals import CompositeScore, CompositeWeight, SignalValue
 from macro_trader.db.models.system import (
     DataFreshness,
     DataLineage,
@@ -35,6 +35,8 @@ from macro_trader.db.models.system import (
 __all__ = [
     "COTWeekly",
     "CalendarEvent",
+    "CompositeScore",
+    "CompositeWeight",
     "DailyBar",
     "DataFreshness",
     "DataLineage",

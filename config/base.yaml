@@ -69,6 +69,7 @@ signals:
     vol_surface_signal: vol_surface.raw.v1
     nowcasting_signal: nowcasting.ols_ar.v1
     regime_classifier: regime.rules.v1
+    composite_score: composite.linear.v1
   trend:
     sma_short:
       fast: 10
@@ -88,6 +89,31 @@ signals:
     regime_conditional_weights:
       enabled: false
       weights_by_regime: {}
+    # Stage 7: per-regime SMA-horizon weight tweaks applied by the
+    # trend ensemble when a production regime classifier is wired in.
+    # Multipliers on the base sma_short / sma_medium / sma_long
+    # ensemble weights; normalised to sum to 1 after multiplication.
+    regime_adjustments:
+      risk_on_growth:
+        short: 1.0
+        medium: 1.0
+        long: 1.0
+      risk_off_defensive:
+        short: 1.5
+        medium: 1.0
+        long: 0.5
+      stagflation:
+        short: 1.0
+        medium: 1.0
+        long: 1.0
+      carry_friendly:
+        short: 0.5
+        medium: 1.0
+        long: 1.5
+      vol_spike:
+        short: 1.5
+        medium: 0.75
+        long: 0.25
   carry:
     spot_proxy:
       enabled_for: [CL, BZ, GC, NG]
@@ -271,3 +297,61 @@ regime:
       cadence: weekly
       day_of_week: 0
       hour_utc: 5
+
+# Stage 7 — composite scoring
+composite:
+  signal_components:
+    - trend_signal
+    - carry_signal
+    - value_signal
+    - positioning_signal
+    - dislocation_signal
+    - factor_exposure_signal
+    - catalyst_signal
+    - alt_data_signal
+    - nowcasting_signal
+    - vol_surface_signal
+  weights:
+    min_attribution_observations: 20
+    smoothing_alpha: 0.3
+    # max(0, sharpe) — see notes/stage_7/decisions.md §weight derivation
+    weight_floor: 0.0
+  conditioning:
+    # "probability_weighted" (smooth, current default) vs "hard_switch"
+    # (argmax label). Pre-decided in notes/stage_7/decisions.md.
+    shape: probability_weighted
+  transition:
+    # BOCPD changepoint-probability driven conviction dampener.
+    threshold: 0.5
+    floor: 0.5
+    bocpd_method_id: regime.bocpd.v1
+  linear:
+    clip_z: 3.0
+    min_signals_for_score: 5
+  bayesian_hier:
+    lookback_days: 504
+    regime_shrinkage: 0.3
+    instrument_shrinkage: 0.5
+    refit:
+      cadence: weekly
+      day_of_week: 0
+      hour_utc: 6
+  gbm:
+    lookback_days: 1008
+    n_estimators: 500
+    learning_rate: 0.05
+    max_depth: 5
+    min_child_samples: 20
+    early_stopping_rounds: 30
+    validation_fold_fraction: 0.2
+    random_state: 42
+    refit:
+      cadence: quarterly
+      months: [1, 4, 7, 10]
+      day_of_month: 1
+      hour_utc: 7
+  daily:
+    # Composite score runs 15 minutes after regime classification at
+    # 23:30 UTC so it has fresh regime labels + signal_values.
+    hour_utc: 23
+    minute_utc: 45
