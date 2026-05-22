@@ -25,6 +25,10 @@ from macro_trader.methods.setup import register_all_methods
 from orchestration.assets import (
     ALL_ASSETS,
     catalyst_models_refit,
+    composite_bayesian_refit,
+    composite_gbm_refit,
+    composite_score_compute,
+    composite_weights_refit,
     daily_data_quality,
     dislocation_models_refit,
     factor_exposure_models_refit,
@@ -217,6 +221,43 @@ regime_attribution_job = define_asset_job(
     ),
 )
 
+composite_weights_refit_job = define_asset_job(
+    name="composite_weights_refit_job",
+    selection=AssetSelection.assets(composite_weights_refit),
+    description=(
+        "Weekly refit of the composite weight snapshot (Sunday 06:00 "
+        "UTC, after attribution at 05:00). Reads regime.regime_"
+        "attribution + writes signals.composite_weights."
+    ),
+)
+
+composite_bayesian_refit_job = define_asset_job(
+    name="composite_bayesian_refit_job",
+    selection=AssetSelection.assets(composite_bayesian_refit),
+    description=(
+        "Weekly fit of the Bayesian hierarchical composite (Sunday "
+        "06:30 UTC, after composite weights at 06:00)."
+    ),
+)
+
+composite_gbm_refit_job = define_asset_job(
+    name="composite_gbm_refit_job",
+    selection=AssetSelection.assets(composite_gbm_refit),
+    description=(
+        "Quarterly fit of the LightGBM composite (first Sunday of "
+        "Jan/Apr/Jul/Oct at 07:00 UTC)."
+    ),
+)
+
+composite_score_job = define_asset_job(
+    name="composite_score_job",
+    selection=AssetSelection.assets(composite_score_compute),
+    description=(
+        "Daily composite scoring across all 3 methods (23:45 UTC; 15 "
+        "min after regime + signals at 23:30)."
+    ),
+)
+
 
 # ----------------------------------------------------------------------
 # Schedules (all UTC)
@@ -331,6 +372,43 @@ SCHEDULES = [
         execution_timezone="UTC",
         description="Daily regime classification (alongside compute_all_signals_job).",
     ),
+    ScheduleDefinition(
+        name="composite_weights_refit_weekly_sunday_0600_utc",
+        cron_schedule="0 6 * * 0",
+        job=composite_weights_refit_job,
+        execution_timezone="UTC",
+        description=(
+            "Weekly refresh of the composite weight snapshot from "
+            "the regime attribution table."
+        ),
+    ),
+    ScheduleDefinition(
+        name="composite_bayesian_refit_weekly_sunday_0630_utc",
+        cron_schedule="30 6 * * 0",
+        job=composite_bayesian_refit_job,
+        execution_timezone="UTC",
+        description="Weekly Bayesian hierarchical composite fit.",
+    ),
+    ScheduleDefinition(
+        name="composite_gbm_refit_quarterly_first_sunday_0700_utc",
+        # First Sunday of Jan/Apr/Jul/Oct at 07:00. cron doesn't
+        # directly express "first Sunday of month"; we use day-of-month
+        # in [1-7] AND day-of-week=0 (Sunday).
+        cron_schedule="0 7 1-7 1,4,7,10 0",
+        job=composite_gbm_refit_job,
+        execution_timezone="UTC",
+        description="Quarterly LightGBM composite fit.",
+    ),
+    ScheduleDefinition(
+        name="composite_score_daily_2345_utc",
+        cron_schedule="45 23 * * *",
+        job=composite_score_job,
+        execution_timezone="UTC",
+        description=(
+            "Daily composite scoring across all 3 methods (15 min "
+            "after regime + signals at 23:30)."
+        ),
+    ),
 ]
 
 
@@ -361,6 +439,10 @@ defs = Definitions(
         regime_refit_job,
         regime_classification_job,
         regime_attribution_job,
+        composite_weights_refit_job,
+        composite_bayesian_refit_job,
+        composite_gbm_refit_job,
+        composite_score_job,
     ],
     schedules=SCHEDULES,
     resources=_resources(),

@@ -1,6 +1,13 @@
 """Dagster assets."""
 
 from orchestration.assets.calendar import CALENDAR_ASSETS, refresh_calendar_events
+from orchestration.assets.composite import (
+    COMPOSITE_ASSETS,
+    composite_bayesian_refit,
+    composite_gbm_refit,
+    composite_score_compute,
+    composite_weights_refit,
+)
 from orchestration.assets.data_quality import DATA_QUALITY_ASSETS, daily_data_quality
 from orchestration.assets.heartbeat import heartbeat_asset
 from orchestration.assets.ingest import (
@@ -45,16 +52,22 @@ ALL_ASSETS = [
     *DATA_QUALITY_ASSETS,
     *SIGNAL_ASSETS,
     *REGIME_ASSETS,
+    *COMPOSITE_ASSETS,
 ]
 
 __all__ = [
     "ALL_ASSETS",
     "CALENDAR_ASSETS",
+    "COMPOSITE_ASSETS",
     "DATA_QUALITY_ASSETS",
     "INGEST_ASSETS",
     "REGIME_ASSETS",
     "SIGNAL_ASSETS",
     "catalyst_models_refit",
+    "composite_bayesian_refit",
+    "composite_gbm_refit",
+    "composite_score_compute",
+    "composite_weights_refit",
     "daily_data_quality",
     "dislocation_models_refit",
     "factor_exposure_models_refit",
