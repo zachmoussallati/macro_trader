@@ -1,10 +1,16 @@
-"""Full-stack smoke (Stage 6 Phase 0.4).
+"""Full-stack smoke (Stage 7 Phase 0.4 — extended from Stage 6).
 
-Verifies the methods registry knows about every Stage-5 component
-+ method. The signal-pipeline emission half is exercised by each
-family's dedicated integration test (Stages 3/4A/4B/4C/5/6);
-this smoke is the lightest check that the *registration* step
-covers all 10 families.
+Verifies the methods registry knows about every Stage-2..6 component
++ method. Stage 6 added 5 regime methods; this file's component +
+method sets are updated to match. The signal-pipeline emission half
+is exercised by each family's dedicated integration test (Stages
+3/4A/4B/4C/5/6); this smoke is the lightest check that the
+*registration* step covers all 10 signal families + the regime
+classifier component.
+
+(Stage 7 will add ``composite_score`` once the composite methods
+register; ``EXPECTED_METHOD_IDS`` / ``EXPECTED_COMPONENTS`` get
+extended in that stage.)
 """
 
 from __future__ import annotations
@@ -14,6 +20,7 @@ from sqlalchemy import select
 
 from macro_trader.db.models.system import MethodRegistryRow
 from macro_trader.methods.setup import register_all_methods
+from macro_trader.regime.methods import _hmmlearn_available
 
 EXPECTED_METHOD_IDS: set[str] = {
     # Stage 2: data quality (registered in Stage 2 setup)
@@ -45,6 +52,12 @@ EXPECTED_METHOD_IDS: set[str] = {
     "nowcasting.bvar.v1",
     "vol_surface.raw.v1",
     "vol_surface.svi.v1",
+    # Stage 6: regime classifier (rules + GMM + BOCPD always; MS-VAR
+    # gated on statsmodels.MarkovRegression; HMM gated on hmmlearn)
+    "regime.rules.v1",
+    "regime.gmm.v1",
+    "regime.bocpd.v1",
+    "regime.msvar.v1",
 }
 
 EXPECTED_COMPONENTS: set[str] = {
@@ -59,6 +72,7 @@ EXPECTED_COMPONENTS: set[str] = {
     "alt_data_signal",
     "nowcasting_signal",
     "vol_surface_signal",
+    "regime_classifier",
 }
 
 
@@ -73,7 +87,14 @@ def test_full_signal_stack_registers(db_session) -> None:
     method_ids = {r.method_id for r in rows}
     components = {r.component for r in rows}
 
-    missing_methods = EXPECTED_METHOD_IDS - method_ids
+    # HMM is gated on hmmlearn — only require it when the library
+    # is installed (matches what register_all_methods will have
+    # registered conditionally).
+    expected = set(EXPECTED_METHOD_IDS)
+    if _hmmlearn_available():
+        expected.add("regime.hmm.v1")
+
+    missing_methods = expected - method_ids
     assert not missing_methods, (
         f"missing method registrations: {sorted(missing_methods)}"
     )
